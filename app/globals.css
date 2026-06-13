@@ -94,8 +94,8 @@
   --hairline: oklch(1 0 0 / 7%);                       /* fine divider */
   --highlight: oklch(1 0 0 / 8%);                      /* top inner edge light */
   --glass-bg: oklch(0.185 0.024 256 / 62%);
-  --glow-soft: 0 0 0 1px oklch(var(--glow-color) / 16%), 0 10px 30px -14px oklch(var(--glow-color) / 35%);
-  --glow-strong: 0 0 0 1px oklch(var(--glow-color) / 30%), 0 0 28px -6px oklch(var(--glow-color) / 55%);
+  --glow-soft: 0 0 0 1px oklch(var(--glow-color) / 24%), 0 12px 38px -12px oklch(var(--glow-color) / 50%);
+  --glow-strong: 0 0 0 1px oklch(var(--glow-color) / 45%), 0 0 42px -4px oklch(var(--glow-color) / 75%);
 
   /* Sidebar */
   --sidebar: oklch(0.14 0.026 256);
@@ -120,10 +120,10 @@
     /* Ambient instrument-panel backdrop: faint cyan glow + fine grid + vignette */
     background-color: var(--background);
     background-image:
-      radial-gradient(120% 75% at 50% -8%, oklch(var(--glow-color) / 9%), transparent 55%),
-      radial-gradient(100% 60% at 100% 100%, oklch(0.7 0.13 280 / 6%), transparent 60%),
-      linear-gradient(oklch(1 0 0 / 2%) 1px, transparent 1px),
-      linear-gradient(90deg, oklch(1 0 0 / 2%) 1px, transparent 1px);
+      radial-gradient(120% 80% at 50% -10%, oklch(var(--glow-color) / 14%), transparent 58%),
+      radial-gradient(90% 55% at 100% 100%, oklch(0.7 0.13 280 / 10%), transparent 60%),
+      linear-gradient(oklch(1 0 0 / 3.5%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(1 0 0 / 3.5%) 1px, transparent 1px);
     background-size: 100% 100%, 100% 100%, 100% 44px, 44px 100%;
     background-attachment: fixed;
     background-repeat: no-repeat, no-repeat, repeat, repeat;

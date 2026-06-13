@@ -2,24 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, Mic, ListOrdered, FileText, Upload, Salad } from 'lucide-react'
-
-const navItems = [
-  { href: '/', label: 'Talk', icon: Mic },
-  { href: '/today', label: 'Today', icon: Activity },
-  { href: '/diet', label: 'Diet', icon: Salad },
-  { href: '/timeline', label: 'Timeline', icon: ListOrdered },
-  { href: '/imports', label: 'Import', icon: Upload },
-  { href: '/report', label: 'Report', icon: FileText },
-]
+import { NAV_ITEMS } from './nav-items'
 
 export function BottomNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-[var(--glass-bg)] backdrop-blur-xl">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-[var(--glass-bg)] backdrop-blur-xl">
       <div className="max-w-md mx-auto flex items-stretch">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href
           return (
             <Link

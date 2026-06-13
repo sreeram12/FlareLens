@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { BottomNav } from '@/components/bottom-nav'
+import { SideNav } from '@/components/side-nav'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
@@ -31,8 +32,13 @@ export default function RootLayout({
         className="bg-background text-foreground antialiased min-h-screen font-sans"
         suppressHydrationWarning
       >
-        <main className="pb-20 max-w-md mx-auto min-h-screen">
-          {children}
+        <SideNav />
+        {/* Mobile: full-width column + bottom nav. Desktop: offset for the sidebar
+            with a comfortably wider, centered content column. */}
+        <main className="min-h-screen pb-24 lg:pb-10 lg:pl-60">
+          <div className="mx-auto w-full max-w-md lg:max-w-3xl">
+            {children}
+          </div>
         </main>
         <BottomNav />
       </body>
