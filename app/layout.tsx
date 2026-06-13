@@ -35,11 +35,9 @@ export default function RootLayout({
         <SideNav />
         {/* Mobile: full-width column + bottom nav. Desktop: offset for the sidebar
             with a comfortably wider, centered content column. */}
-        <main className="min-h-screen pb-24 lg:pb-10 lg:pl-60">
-          <div className="mx-auto w-full max-w-md lg:max-w-3xl">
-            {children}
-          </div>
-        </main>
+        {/* Pages own their own max-width (content pages center a column; the
+            dashboard/Talk/Timeline go wider with grids/two-pane on laptop). */}
+        <main className="min-h-screen pb-24 lg:pb-10 lg:pl-60">{children}</main>
         <BottomNav />
       </body>
     </html>

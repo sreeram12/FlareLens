@@ -11,7 +11,7 @@ export default async function ReportPage() {
   ])
 
   return (
-    <div className="flex flex-col gap-4 px-4 pt-6 pb-4">
+    <div className="mx-auto w-full max-w-2xl lg:max-w-3xl flex flex-col gap-4 px-4 pt-6 pb-4">
       <div className="flex items-center gap-3 mb-2">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Doctor Report</h1>

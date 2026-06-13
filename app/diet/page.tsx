@@ -25,7 +25,7 @@ export default async function DietPage() {
   const accent = ACCENT[phaseInfo.accent]
 
   return (
-    <main className="mx-auto max-w-md px-4 pb-24 pt-6">
+    <main className="mx-auto max-w-md lg:max-w-3xl px-4 pb-24 pt-6">
       {/* Header */}
       <header className="mb-5">
         <div className="flex items-center gap-2 mb-1">

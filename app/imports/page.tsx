@@ -11,7 +11,7 @@ export default async function ImportsPage() {
   const fastenCount = recent.filter((e) => e.source === 'fasten').length
 
   return (
-    <div className="flex flex-col gap-6 px-4 pt-6 pb-4">
+    <div className="mx-auto w-full max-w-2xl lg:max-w-3xl flex flex-col gap-6 px-4 pt-6 pb-4">
       <header className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15">
