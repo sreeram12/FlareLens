@@ -87,15 +87,19 @@ export function StabilityScoreCard({ score, scoreHistory }: StabilityScoreCardPr
 }
 
 function ScoreDial({ score, color }: { score: number; color: string }) {
-  const size = 72
-  const r = 28
+  const size = 80
+  const stroke = 7
+  const r = (size - stroke) / 2
   const cx = size / 2
   const cy = size / 2
-  const circumference = Math.PI * r // half circle
-  const fillRatio = Math.min(score / 100, 1)
-  const filled = fillRatio * circumference
+  // 270-degree gauge (leaves a 90deg gap at the bottom)
+  const arcFraction = 0.75
+  const circumference = 2 * Math.PI * r
+  const arcLength = circumference * arcFraction
+  const fillRatio = Math.min(Math.max(score / 100, 0), 1)
+  const filled = fillRatio * arcLength
 
-  // Extract a CSS color from the tailwind class for stroke
+  // Map the tailwind text color to a stroke hex
   const strokeColor =
     color.includes('emerald') ? '#34d399' :
     color.includes('yellow') ? '#facc15' :
@@ -103,26 +107,39 @@ function ScoreDial({ score, color }: { score: number; color: string }) {
     color.includes('red-3') ? '#fca5a5' : '#f87171'
 
   return (
-    <svg width={size} height={size / 2 + 6} viewBox={`0 0 ${size} ${size / 2 + 6}`}>
-      {/* Track */}
-      <path
-        d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="6"
-        className="text-border"
-        strokeLinecap="round"
-      />
-      {/* Fill */}
-      <path
-        d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth="6"
-        strokeLinecap="round"
-        strokeDasharray={`${filled} ${circumference}`}
-        style={{ transition: 'stroke-dasharray 0.5s ease' }}
-      />
-    </svg>
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-[135deg]">
+        {/* Track */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          className="text-border"
+          strokeLinecap="round"
+          strokeDasharray={`${arcLength} ${circumference}`}
+        />
+        {/* Fill */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${filled} ${circumference}`}
+          style={{ transition: 'stroke-dasharray 0.5s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={cn('text-lg font-bold tabular-nums leading-none', color)}>
+          {Math.round(score)}
+        </span>
+        <span className="text-[9px] text-muted-foreground leading-none mt-0.5">/100</span>
+      </div>
+    </div>
   )
 }
