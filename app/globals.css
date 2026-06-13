@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), system-ui, sans-serif;
-  --font-mono: 'Courier New', monospace;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Courier New', monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,64 +47,136 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* FlareLens — Deep Navy Dark Theme (always dark) */
+/* ───────────────────────────────────────────────────────────────────────────
+   FlareLens — "Chrome Futurism" (always dark)
+   Deep layered navy · single electric-cyan accent · glass panels · soft glow
+   ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Background layers: deep navy → slate panels → elevated cards */
-  --background: oklch(0.13 0.025 255);        /* #0d1117 deep navy */
-  --foreground: oklch(0.92 0.005 240);         /* near-white text */
-  --card: oklch(0.17 0.022 255);               /* #161b22 panel */
-  --card-foreground: oklch(0.92 0.005 240);
-  --popover: oklch(0.17 0.022 255);
-  --popover-foreground: oklch(0.92 0.005 240);
+  /* Background layers: void navy → panel → elevated glass */
+  --background: oklch(0.12 0.028 256);
+  --foreground: oklch(0.95 0.006 240);
+  --card: oklch(0.165 0.026 256);
+  --card-foreground: oklch(0.95 0.006 240);
+  --popover: oklch(0.165 0.026 256);
+  --popover-foreground: oklch(0.95 0.006 240);
 
-  /* Primary: electric blue accent */
-  --primary: oklch(0.62 0.2 250);             /* #4f8ef7 blue */
-  --primary-foreground: oklch(0.99 0 0);
+  /* Primary: electric cyan (the single hero accent) */
+  --primary: oklch(0.74 0.146 214);
+  --primary-foreground: oklch(0.14 0.03 256);
 
-  /* Secondary / muted: slate */
-  --secondary: oklch(0.22 0.018 255);
-  --secondary-foreground: oklch(0.75 0.008 240);
-  --muted: oklch(0.20 0.018 255);
-  --muted-foreground: oklch(0.55 0.01 240);
+  /* Secondary / muted: cool slate */
+  --secondary: oklch(0.23 0.02 256);
+  --secondary-foreground: oklch(0.8 0.01 240);
+  --muted: oklch(0.21 0.018 256);
+  --muted-foreground: oklch(0.62 0.014 236);
 
-  /* Accent: teal */
-  --accent: oklch(0.65 0.14 195);             /* teal accent */
+  /* Accent: a touch of violet for charts/secondary highlights */
+  --accent: oklch(0.7 0.13 280);
   --accent-foreground: oklch(0.99 0 0);
 
   /* Semantic */
-  --destructive: oklch(0.60 0.22 25);         /* red-orange */
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.62 0.2 250 / 50%);
+  --destructive: oklch(0.62 0.22 25);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.74 0.146 214 / 55%);
 
-  /* Chart colors: blue, teal, emerald, yellow, red */
-  --chart-1: oklch(0.62 0.2 250);
-  --chart-2: oklch(0.65 0.14 195);
-  --chart-3: oklch(0.68 0.16 160);
-  --chart-4: oklch(0.78 0.16 95);
-  --chart-5: oklch(0.60 0.22 25);
+  /* Chart colors: cyan, violet, emerald, amber, red */
+  --chart-1: oklch(0.74 0.146 214);
+  --chart-2: oklch(0.7 0.13 280);
+  --chart-3: oklch(0.7 0.15 162);
+  --chart-4: oklch(0.8 0.15 90);
+  --chart-5: oklch(0.62 0.22 25);
 
-  --radius: 0.5rem;
+  --radius: 0.75rem;
+
+  /* Chrome-futurism extras */
+  --glow-color: 0.74 0.146 214;                       /* cyan, used in oklch() */
+  --hairline: oklch(1 0 0 / 7%);                       /* fine divider */
+  --highlight: oklch(1 0 0 / 8%);                      /* top inner edge light */
+  --glass-bg: oklch(0.185 0.024 256 / 62%);
+  --glow-soft: 0 0 0 1px oklch(var(--glow-color) / 16%), 0 10px 30px -14px oklch(var(--glow-color) / 35%);
+  --glow-strong: 0 0 0 1px oklch(var(--glow-color) / 30%), 0 0 28px -6px oklch(var(--glow-color) / 55%);
 
   /* Sidebar */
-  --sidebar: oklch(0.15 0.024 255);
-  --sidebar-foreground: oklch(0.75 0.008 240);
-  --sidebar-primary: oklch(0.62 0.2 250);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.22 0.018 255);
-  --sidebar-accent-foreground: oklch(0.92 0.005 240);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.62 0.2 250 / 50%);
+  --sidebar: oklch(0.14 0.026 256);
+  --sidebar-foreground: oklch(0.8 0.01 240);
+  --sidebar-primary: oklch(0.74 0.146 214);
+  --sidebar-primary-foreground: oklch(0.14 0.03 256);
+  --sidebar-accent: oklch(0.23 0.02 256);
+  --sidebar-accent-foreground: oklch(0.95 0.006 240);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.74 0.146 214 / 55%);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground font-sans antialiased;
-  }
   html {
     @apply bg-background font-sans;
+  }
+  body {
+    @apply text-foreground font-sans antialiased;
+    /* Ambient instrument-panel backdrop: faint cyan glow + fine grid + vignette */
+    background-color: var(--background);
+    background-image:
+      radial-gradient(120% 75% at 50% -8%, oklch(var(--glow-color) / 9%), transparent 55%),
+      radial-gradient(100% 60% at 100% 100%, oklch(0.7 0.13 280 / 6%), transparent 60%),
+      linear-gradient(oklch(1 0 0 / 2%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(1 0 0 / 2%) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 44px, 44px 100%;
+    background-attachment: fixed;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+  }
+
+  ::selection {
+    background: oklch(var(--glow-color) / 30%);
+  }
+
+  /* Slim, on-theme scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 14%) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 14%);
+    border-radius: 9999px;
+  }
+}
+
+@layer components {
+  /* Translucent, blurred panel with a fine top highlight and depth shadow. */
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid var(--hairline);
+    box-shadow:
+      inset 0 1px 0 var(--highlight),
+      0 12px 36px -18px oklch(0 0 0 / 80%);
+  }
+
+  /* Cyan glow for hero / interactive elements. */
+  .glow {
+    box-shadow: var(--glow-soft);
+  }
+  .glow-strong {
+    box-shadow: var(--glow-strong);
+  }
+  .text-glow {
+    text-shadow: 0 0 18px oklch(var(--glow-color) / 55%);
+  }
+
+  /* Mono "instrument panel" label. */
+  .label-mono {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.6875rem;
+    color: var(--muted-foreground);
   }
 }

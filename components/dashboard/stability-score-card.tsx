@@ -16,7 +16,7 @@ interface StabilityScoreCardProps {
 }
 
 export function StabilityScoreCard({ score, scoreHistory }: StabilityScoreCardProps) {
-  const { label, color, bgColor, description } = getScoreLabel(score)
+  const { label, color, description } = getScoreLabel(score)
 
   // Compute trend from last 2 days
   const sorted = [...scoreHistory].sort((a, b) => a.date.localeCompare(b.date))
@@ -31,12 +31,10 @@ export function StabilityScoreCard({ score, scoreHistory }: StabilityScoreCardPr
   const maxScore = Math.max(...scoreHistory.map(s => s.score), 1)
 
   return (
-    <div className={cn('rounded-xl border p-5 bg-card', bgColor)}>
+    <div className="glass-panel glow rounded-2xl p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase mb-1">
-            Stability Score
-          </p>
+          <p className="label-mono mb-1">Stability Score</p>
           <div className="flex items-baseline gap-2">
             <span className={cn('text-5xl font-bold tabular-nums leading-none', color)}>
               {Math.round(score)}
