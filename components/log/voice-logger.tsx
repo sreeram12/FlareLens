@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { Mic, MicOff, Loader2, CheckCircle2, RefreshCw, Send } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { saveLogEntry } from '@/lib/actions'
 import { LogEntryPreview } from './log-entry-preview'
 import { ManualLogForm } from './manual-log-form'
@@ -122,14 +121,14 @@ export function VoiceLogger() {
             <div className="text-center">
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Tap the mic and speak naturally.<br />
-                <span className="text-xs">"I had 3 BMs this morning, pain around a 4..."</span>
+                <span className="text-xs">&ldquo;I had 3 BMs this morning, pain around a 4...&rdquo;</span>
               </p>
             </div>
             <button
               onClick={startRecording}
-              className="h-20 w-20 rounded-full bg-primary/10 border-2 border-primary/50 flex items-center justify-center hover:bg-primary/20 hover:border-primary transition-all active:scale-95"
+              className="glow h-20 w-20 rounded-full bg-primary/10 border-2 border-primary/50 flex items-center justify-center hover:bg-primary/20 hover:border-primary transition-all active:scale-95"
             >
-              <Mic className="h-8 w-8 text-primary" strokeWidth={2} />
+              <Mic className="h-8 w-8 text-primary text-glow" strokeWidth={2} />
             </button>
           </>
         )}
