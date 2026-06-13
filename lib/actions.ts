@@ -153,6 +153,10 @@ export async function getTodayScore() {
 }
 
 export async function getScoreHistory(days = 7) {
+  // Ensure each of the past `days` days has a computed score so the
+  // sparkline and trend have real data (not just today).
+  await backfillScoreHistory(days)
+
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffDate = cutoff.toISOString().split('T')[0]
@@ -167,6 +171,61 @@ export async function getScoreHistory(days = 7) {
       )
     )
     .orderBy(dailyStabilityScores.scoreDate)
+}
+
+// Compute and store a stability score for any of the past `days` days
+// that have log entries but no saved score yet.
+async function backfillScoreHistory(days = 7) {
+  const baseline = await getBaselines()
+
+  // Which dates already have a stored score?
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - days)
+  const cutoffDate = cutoff.toISOString().split('T')[0]
+
+  const existing = await db
+    .select({ scoreDate: dailyStabilityScores.scoreDate })
+    .from(dailyStabilityScores)
+    .where(
+      and(
+        eq(dailyStabilityScores.patientId, PATIENT_ID),
+        gte(dailyStabilityScores.scoreDate, cutoffDate)
+      )
+    )
+  const have = new Set(existing.map((r) => r.scoreDate))
+
+  for (let i = 0; i <= days; i++) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().split('T')[0]
+    if (have.has(dateStr)) continue
+
+    const entries = await getLogEntriesForDate(dateStr)
+    if (entries.length === 0) continue // no data that day — skip
+
+    const dayData = aggregateEntriesIntoDayData(entries)
+    const result = computeStabilityScore(dayData, baseline)
+
+    await db
+      .insert(dailyStabilityScores)
+      .values({
+        patientId: PATIENT_ID,
+        scoreDate: dateStr,
+        totalScore: result.totalScore.toString(),
+        domainScores: result.domainScores,
+        scoreReasons: result.scoreReasons,
+        isFlareDayBoolean: result.isFlareDay,
+      })
+      .onConflictDoUpdate({
+        target: [dailyStabilityScores.patientId, dailyStabilityScores.scoreDate],
+        set: {
+          totalScore: result.totalScore.toString(),
+          domainScores: result.domainScores,
+          scoreReasons: result.scoreReasons,
+          isFlareDayBoolean: result.isFlareDay,
+        },
+      })
+  }
 }
 
 // ─── Medications ──────────────────────────────────────────────────────────────
