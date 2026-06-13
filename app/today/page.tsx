@@ -1,6 +1,7 @@
-import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory, runAnalysis } from '@/lib/actions'
+import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory, getFindings } from '@/lib/actions'
 import { StabilityScoreCard } from '@/components/dashboard/stability-score-card'
 import { SignalsFeed } from '@/components/dashboard/signals-feed'
+import { AnalysisRefresher } from '@/components/dashboard/analysis-refresher'
 import { DomainCards } from '@/components/dashboard/domain-cards'
 import { ScoreReasons } from '@/components/dashboard/score-reasons'
 import { QuickActions } from '@/components/dashboard/quick-actions'
@@ -17,7 +18,7 @@ export default async function TodayPage() {
     getRecentLogEntries(20),
     getMedications(),
     getScoreHistory(7),
-    runAnalysis(), // background analyst: refresh findings on open
+    getFindings(), // read stored findings (read-only); refresh happens post-mount
   ])
 
   const todayStr = new Date().toISOString().split('T')[0]
@@ -32,6 +33,7 @@ export default async function TodayPage() {
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-6 pb-4">
+      <AnalysisRefresher />
       <TodayHeader patientName="Alex" />
 
       <SignalsFeed

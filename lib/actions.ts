@@ -142,7 +142,9 @@ export async function computeAndSaveTodayScore() {
       },
     })
 
-  revalidatePath('/')
+  // NOTE: no revalidatePath here — getTodayScore() calls this during render when
+  // a day has no stored score yet, and revalidate-during-render is unsupported.
+  // Logging flows revalidate via saveLogEntry / runAnalysis instead.
   return result
 }
 
