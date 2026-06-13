@@ -1,4 +1,4 @@
-import { getDietGuidance } from '@/lib/actions'
+import { getDietGuidance, getNutrientGaps } from '@/lib/actions'
 import {
   AID_PRINCIPLES,
   ANTI_INFLAMMATORY_FOODS,
@@ -18,7 +18,10 @@ const ACCENT: Record<string, { text: string; bg: string; ring: string; dot: stri
 }
 
 export default async function DietPage() {
-  const { phase, phaseInfo, todayAnti, todayPro } = await getDietGuidance()
+  const [{ phase, phaseInfo, todayAnti, todayPro }, nutrition] = await Promise.all([
+    getDietGuidance(),
+    getNutrientGaps(14),
+  ])
   const accent = ACCENT[phaseInfo.accent]
 
   return (
@@ -57,6 +60,32 @@ export default async function DietPage() {
           </p>
         )}
       </section>
+
+      {/* Nutrient watch — from imported MacroFactor nutrition */}
+      {nutrition.daysWithNutritionData > 0 && nutrition.gaps.length > 0 && (
+        <section className="mb-6">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Nutrient watch</h3>
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2.5">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              From {nutrition.daysWithNutritionData} day{nutrition.daysWithNutritionData > 1 ? 's' : ''} of imported nutrition. General targets — discuss with your care team.
+            </p>
+            {nutrition.gaps.slice(0, 5).map((g) => (
+              <div key={g.key} className="flex items-center justify-between gap-2">
+                <span className="text-sm text-foreground">{g.label}</span>
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 tabular-nums',
+                    g.status === 'low' ? 'text-yellow-400 bg-yellow-500/10' : 'text-orange-400 bg-orange-500/10'
+                  )}
+                >
+                  {g.status === 'low' ? 'Low' : 'High'} · {g.avg}
+                  {g.unit}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Phase journey */}
       <section className="mb-6">

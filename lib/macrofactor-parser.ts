@@ -36,6 +36,24 @@ export interface ParsedDay {
   fatPercent?: number
   expenditure?: number // kcal (TDEE)
   steps?: number
+  // ── IBD micronutrient panel (PMC8100370 "nutrients of concern" + fat type) ──
+  satFat?: number // g
+  transFat?: number // g
+  monoFat?: number // g
+  polyFat?: number // g
+  omega3?: number // g
+  omega6?: number // g
+  addedSugar?: number // g
+  cholesterol?: number // mg
+  alcohol?: number // g
+  vitaminD?: number // mcg
+  b12?: number // mcg
+  calcium?: number // mg
+  iron?: number // mg
+  folate?: number // mcg
+  magnesium?: number // mg
+  zinc?: number // mg
+  potassium?: number // mg
 }
 
 type RawRow = Record<string, unknown>
@@ -118,6 +136,24 @@ const METRIC_MAP: Record<string, keyof ParsedDay> = {
   bodyfat: 'fatPercent',
   expenditure: 'expenditure',
   steps: 'steps',
+  // IBD micronutrient panel (exact normalized MacroFactor header names)
+  saturatedfatg: 'satFat',
+  transfatg: 'transFat',
+  monounsaturatedfatg: 'monoFat',
+  polyunsaturatedfatg: 'polyFat',
+  omega3g: 'omega3',
+  omega6g: 'omega6',
+  sugarsaddedg: 'addedSugar',
+  cholesterolmg: 'cholesterol',
+  alcoholg: 'alcohol',
+  vitamindmcg: 'vitaminD',
+  b12cobalaminmcg: 'b12',
+  calciummg: 'calcium',
+  ironmg: 'iron',
+  folatemcg: 'folate',
+  magnesiummg: 'magnesium',
+  zincmg: 'zinc',
+  potassiummg: 'potassium',
 }
 
 /** Which fields arrive in pounds and must be converted to kg downstream. */
@@ -197,42 +233,32 @@ function parseLong(rows: RawRow[]): ReturnType<typeof parseMacroFactorSheets> {
   return { days, detectedColumns: Array.from(detected), sheetSummary }
 }
 
-// ── WIDE format fallback: one column per metric ──────────────────────────────
+// ── WIDE format (the real MacroFactor .xlsx: one sheet per topic, one column
+//    per metric). Columns are matched to ParsedDay fields by EXACT normalized
+//    name via METRIC_MAP — no fuzzy `includes`, so "Saturated Fat (g)" can never
+//    overwrite total "Fat (g)". ──────────────────────────────────────────────
 function parseWide(sheets: RawSheet[]): ReturnType<typeof parseMacroFactorSheets> {
   const byDate = new Map<string, ParsedDay>()
   const detected = new Set<string>()
   const sheetSummary: { name: string; rows: number; matched: string[] }[] = []
 
-  const COLS: Record<keyof ParsedDay, string[]> = {
-    date: ['date', 'day'],
-    calories: ['calories', 'energy', 'kcal'],
-    protein: ['protein'],
-    carbs: ['carbs', 'carbohydrate', 'carbohydrates'],
-    fat: ['fat', 'totalfat'],
-    fiber: ['fiber', 'fibre'],
-    water: ['water'],
-    caffeine: ['caffeine'],
-    sodium: ['sodium'],
-    sugars: ['sugars', 'sugar'],
-    weightKg: ['scaleweight', 'weight', 'bodyweight'],
-    trendWeightKg: ['trendweight', 'trend'],
-    fatPercent: ['fatpercent', 'bodyfat'],
-    expenditure: ['expenditure', 'tdee'],
-    steps: ['steps'],
-  }
-
   for (const sheet of sheets) {
     if (!sheet.rows.length) { sheetSummary.push({ name: sheet.name, rows: 0, matched: [] }); continue }
     const sample = sheet.rows[0]
-    const dateKey = findKey(sample, COLS.date)
+
+    const dateKey = Object.keys(sample).find((k) => {
+      const nk = norm(k)
+      return nk === 'date' || nk === 'day' || nk.includes('date')
+    })
     if (!dateKey) { sheetSummary.push({ name: sheet.name, rows: sheet.rows.length, matched: [] }); continue }
 
+    // Map each column to a field by exact normalized header name.
+    const colMap = new Map<string, keyof ParsedDay>()
     const matched: string[] = []
-    const keyMap = new Map<keyof ParsedDay, string>()
-    for (const field of Object.keys(COLS) as (keyof ParsedDay)[]) {
-      if (field === 'date') continue
-      const k = findKey(sample, COLS[field])
-      if (k) { keyMap.set(field, k); matched.push(field); detected.add(field) }
+    for (const key of Object.keys(sample)) {
+      if (key === dateKey) continue
+      const field = METRIC_MAP[norm(key)]
+      if (field) { colMap.set(key, field); matched.push(field); detected.add(field) }
     }
     sheetSummary.push({ name: sheet.name, rows: sheet.rows.length, matched })
 
@@ -240,10 +266,10 @@ function parseWide(sheets: RawSheet[]): ReturnType<typeof parseMacroFactorSheets
       const date = toDateStr(row[dateKey])
       if (!date) continue
       const day = byDate.get(date) ?? { date }
-      for (const [field, key] of keyMap) {
-        let v = toNumber(row[key])
+      for (const [colKey, field] of colMap) {
+        let v = toNumber(row[colKey])
         if (v === undefined) continue
-        if ((field === 'weightKg' || field === 'trendWeightKg') && v > 120) {
+        if (LBS_METRICS.has(norm(colKey))) {
           v = Math.round(v * 0.453592 * 10) / 10
         }
         ;(day[field] as number) = v

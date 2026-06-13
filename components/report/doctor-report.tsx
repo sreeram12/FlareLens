@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import { format, subDays } from 'date-fns'
-import { FileText, Download, AlertTriangle, CheckCircle2, Activity, Pill, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { FileText, AlertTriangle, CheckCircle2, Pill, TrendingUp, TrendingDown, Minus, Salad } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LogEntry, Medication } from '@/lib/db/schema'
 import { getScoreLabel } from '@/lib/stability-score'
+import { analyzeNutrition } from '@/lib/nutrition-analysis'
 
 interface ScoreDay {
   scoreDate: string | Date
@@ -26,19 +27,22 @@ function avg(arr: number[]) {
 
 export function DoctorReport({ entries, scoreHistory, medications }: DoctorReportProps) {
   const [period, setPeriod] = useState<7 | 14 | 30>(14)
-  const cutoff = subDays(new Date(), period)
+  const cutoff = useMemo(() => subDays(new Date(), period), [period])
 
   const periodEntries = useMemo(() =>
     entries.filter(e => new Date(e.loggedAt) >= cutoff),
-    [entries, period]
+    [entries, cutoff]
   )
 
   const periodScores = useMemo(() =>
     scoreHistory
       .filter(s => new Date(s.scoreDate as string) >= cutoff)
       .map(s => ({ date: s.scoreDate as string, score: parseFloat(s.totalScore as string), isFlareDay: s.isFlareDayBoolean ?? false })),
-    [scoreHistory, period]
+    [scoreHistory, cutoff]
   )
+
+  // IBD nutrient-gap analysis (uses imported MacroFactor micronutrient panel)
+  const nutrition = useMemo(() => analyzeNutrition(periodEntries, period), [periodEntries, period])
 
   // Aggregate stats
   const bmEntries = periodEntries.filter(e => e.entryType === 'bowel_movement')
@@ -165,6 +169,43 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
         <StatRow label="Trigger food days" value={triggerMeals > 0 ? `${triggerMeals} meals` : 'None'} highlight={triggerMeals > 2} />
       </div>
 
+      {/* Nutrition · Anti-Inflammatory Diet */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Salad className="h-4 w-4 text-emerald-400" />
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nutrition · Anti-Inflammatory Diet</p>
+        </div>
+        {nutrition.daysWithNutritionData === 0 ? (
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Import MacroFactor nutrition data to see an anti-inflammatory nutrient analysis (omega-3, saturated fat, vitamin D, B12, calcium, iron, folate, and more).
+          </p>
+        ) : nutrition.gaps.length === 0 ? (
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Tracked nutrients look balanced over the last {nutrition.daysWithNutritionData} day{nutrition.daysWithNutritionData > 1 ? 's' : ''} of nutrition data.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Based on {nutrition.daysWithNutritionData} day{nutrition.daysWithNutritionData > 1 ? 's' : ''} of imported nutrition. Reference targets are general — confirm with your GI or dietitian.
+            </p>
+            {nutrition.gaps.map(g => (
+              <div key={g.key} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-foreground">{g.label}</span>
+                  <span className={cn(
+                    'text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 tabular-nums',
+                    g.status === 'low' ? 'text-yellow-400 bg-yellow-500/10' : 'text-orange-400 bg-orange-500/10'
+                  )}>
+                    {g.status === 'low' ? 'Low' : 'High'} · {g.avg}{g.unit}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{g.note}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Red flags */}
       {redFlags.length > 0 && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
@@ -214,6 +255,11 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
           )}
           {trend === 'worsening' && (
             <li className="text-sm text-foreground">My trend has been worsening over {period} days — should we adjust treatment?</li>
+          )}
+          {nutrition.gaps.length > 0 && (
+            <li className="text-sm text-foreground">
+              My nutrition tracking flags {nutrition.gaps.slice(0, 3).map(g => g.label).join(', ')} — should I supplement or adjust my diet, or check labs?
+            </li>
           )}
           <li className="text-sm text-foreground">Are there dietary changes that could help reduce flare frequency?</li>
           <li className="text-sm text-foreground">When should I contact the office between appointments?</li>
