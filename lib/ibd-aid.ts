@@ -182,6 +182,59 @@ export function getPhaseInfo(phase: AidPhase): PhaseInfo {
 
 export type FoodClass = 'anti-inflammatory' | 'pro-inflammatory' | 'neutral'
 
+/** The three inflammation classes, ordered best → worst, for UI dropdowns. */
+export const FOOD_CLASSES: readonly FoodClass[] = [
+  'anti-inflammatory',
+  'neutral',
+  'pro-inflammatory',
+]
+
+/**
+ * Canonical IBD-relevant meal tags. These describe the *context* of a food in
+ * Crohn's terms (texture, fat, fiber, irritants) rather than generic nutrition,
+ * and are reused by the voice/photo extractors, the editable preview chips, and
+ * the manual form. Tags marked easeOffInFlare are gentle in remission but should
+ * be limited during an active flare (Phase 1) per the IBD-AID texture principle.
+ */
+export interface IbdFoodTag {
+  id: string
+  label: string
+  /** General inflammation lean — used as a hint, not a hard rule. */
+  lean: FoodClass
+  /** True when the food is fine in remission but should be eased off in a flare. */
+  easeOffInFlare?: boolean
+}
+
+export const IBD_FOOD_TAGS: readonly IbdFoodTag[] = [
+  { id: 'fermented', label: 'Fermented / probiotic', lean: 'anti-inflammatory' },
+  { id: 'omega3', label: 'Omega-3 (oily fish)', lean: 'anti-inflammatory' },
+  { id: 'olive_oil', label: 'Olive oil', lean: 'anti-inflammatory' },
+  { id: 'soluble_fiber', label: 'Soluble fiber', lean: 'anti-inflammatory' },
+  { id: 'cooked_veg', label: 'Cooked vegetables', lean: 'anti-inflammatory' },
+  { id: 'berries', label: 'Berries / fruit', lean: 'anti-inflammatory' },
+  { id: 'lean_protein', label: 'Lean protein', lean: 'anti-inflammatory' },
+  { id: 'cruciferous', label: 'Cruciferous veg', lean: 'anti-inflammatory', easeOffInFlare: true },
+  { id: 'raw_veg', label: 'Raw vegetables', lean: 'neutral', easeOffInFlare: true },
+  { id: 'whole_grain', label: 'Whole grains', lean: 'neutral', easeOffInFlare: true },
+  { id: 'nuts_seeds', label: 'Nuts / seeds', lean: 'neutral', easeOffInFlare: true },
+  { id: 'legumes', label: 'Legumes / beans', lean: 'neutral', easeOffInFlare: true },
+  { id: 'high_fiber', label: 'High insoluble fiber', lean: 'neutral', easeOffInFlare: true },
+  { id: 'dairy', label: 'Dairy / lactose', lean: 'neutral' },
+  { id: 'gluten', label: 'Gluten', lean: 'neutral' },
+  { id: 'caffeine', label: 'Caffeine', lean: 'neutral' },
+  { id: 'spicy', label: 'Spicy', lean: 'pro-inflammatory', easeOffInFlare: true },
+  { id: 'high_fat', label: 'High saturated fat', lean: 'pro-inflammatory' },
+  { id: 'fried', label: 'Fried', lean: 'pro-inflammatory' },
+  { id: 'red_meat', label: 'Red meat', lean: 'pro-inflammatory' },
+  { id: 'processed', label: 'Processed / ultra-processed', lean: 'pro-inflammatory' },
+  { id: 'refined_sugar', label: 'Refined sugar', lean: 'pro-inflammatory' },
+  { id: 'fast_food', label: 'Fast food', lean: 'pro-inflammatory' },
+  { id: 'alcohol', label: 'Alcohol', lean: 'pro-inflammatory' },
+]
+
+/** Tag ids only — handy for prompt vocabularies and validation. */
+export const IBD_FOOD_TAG_IDS: readonly string[] = IBD_FOOD_TAGS.map((t) => t.id)
+
 const ANTI_INFLAMMATORY_TERMS = [
   'salmon', 'mackerel', 'sardine', 'tuna', 'trout', 'herring', 'anchovy', 'omega',
   'olive oil', 'avocado', 'flax', 'chia', 'walnut',
@@ -243,3 +296,21 @@ export const PRO_INFLAMMATORY_FOODS: { group: string; items: string[] }[] = [
   { group: 'Processed & red meat', items: ['Bacon', 'Sausage', 'Deli meat', 'Hot dogs', 'Red meat'] },
   { group: 'Other irritants', items: ['Alcohol', 'Artificial sweeteners', 'Emulsifiers', 'Ultra-processed snacks'] },
 ]
+
+// ─── Shared AI guidance ──────────────────────────────────────────────────────
+/**
+ * Reusable prompt fragment that bakes the IBD-AID intelligence into the chat
+ * and voice assistants. Keep it concise — voice replies must stay short.
+ */
+export const AID_AI_GUIDANCE = `How to think about Crohn's:
+- Crohn's is a whole-body inflammatory disease — NOT just bowel movements. Treat stool frequency as only one signal among many. Give equal or greater attention to abdominal pain, urgency, bloating, fatigue, appetite, sleep, stress, and systemic signs (joint pain, mouth sores, eye irritation, fever). Never reduce the conversation to "how many times did you go."
+
+Anti-inflammatory diet (IBD-AID) — make this a focal point:
+- The app follows the IBD Anti-Inflammatory Diet, which adapts to the user's current PHASE based on disease activity:
+  • Phase 1 (active flare): soft, well-cooked, pureed foods; soluble fiber; no seeds/skins; ease off raw veg, whole nuts, fried/fatty/spicy foods and sugar.
+  • Phase 2 (improving): gradually reintroduce soft fiber, cooked vegetables, and fermented foods.
+  • Phase 3 (remission): broad whole-food anti-inflammatory pattern — raw and cruciferous veg, whole grains, nuts, oily fish, fermented foods.
+- Before giving food advice, use the diet-guidance tool to learn the user's current phase, then tailor suggestions to it.
+- Anti-inflammatory foods: oily fish & omega-3s, olive oil, fermented foods (yogurt, kefir, miso), soluble fiber (oats, bananas, cooked carrots/squash), cooked leafy greens, berries, turmeric, ginger. Pro-inflammatory / limit: refined sugar, fried foods, trans & excess saturated fat, processed & red meat, alcohol, ultra-processed snacks.
+- Phase matters: raw cruciferous veg (broccoli, cauliflower, cabbage) and raw insoluble fiber are great in remission but should be eased off during a flare — match food texture to symptoms.
+- When the user logs or mentions a meal, gently note whether it fits an anti-inflammatory pattern for their phase. Be encouraging, not preachy. Frame food as something that "may help calm inflammation" — never a cure or a definitive flare trigger. Defer to their care team or dietitian for dietary changes.`

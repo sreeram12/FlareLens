@@ -3,8 +3,26 @@
 import { useState } from 'react'
 import { saveLogEntry } from '@/lib/actions'
 import { CheckCircle2, Loader2 } from 'lucide-react'
+import {
+  MEAL_TYPES,
+  PORTIONS,
+  EXERCISE_TYPES,
+  EXERCISE_FOCUS,
+  INTENSITIES,
+  type MealType,
+  type Portion,
+  type Intensity,
+} from '@/lib/health/log-schema'
+import { FOOD_CLASSES, IBD_FOOD_TAGS, type FoodClass } from '@/lib/ibd-aid'
+import { TagChips } from './tag-chips'
 
 type EntryType = 'bowel_movement' | 'symptom' | 'meal' | 'medication' | 'sleep' | 'exercise'
+
+const TAG_SUGGESTIONS = IBD_FOOD_TAGS.map((t) => ({ id: t.id, label: t.label }))
+
+function prettify(s: string): string {
+  return s.replace(/[-_]/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+}
 
 interface ManualLogFormProps {
   onSaved: () => void
@@ -28,19 +46,24 @@ export function ManualLogForm({ onSaved }: ManualLogFormProps) {
   const [blood, setBlood] = useState(false)
   const [consistency, setConsistency] = useState('formed')
 
-  // Meal state
+  // Meal state (anti-inflammatory diet aware)
   const [description, setDescription] = useState('')
-  const [calories, setCalories] = useState('')
-  const [triggerFoods, setTriggerFoods] = useState(false)
+  const [mealType, setMealType] = useState<MealType>('lunch')
+  const [portion, setPortion] = useState<Portion>('medium')
+  const [foodClass, setFoodClass] = useState<FoodClass>('neutral')
+  const [tags, setTags] = useState<string[]>([])
 
   // Sleep state
   const [sleepHours, setSleepHours] = useState(7)
   const [sleepQuality, setSleepQuality] = useState(7)
 
   // Exercise state
-  const [exerciseType, setExerciseType] = useState('Walk')
+  const [exerciseType, setExerciseType] = useState('walk')
+  const [focus, setFocus] = useState('')
   const [duration, setDuration] = useState(30)
-  const [steps, setSteps] = useState(0)
+  const [intensity, setIntensity] = useState<Intensity>('moderate')
+  const [rpe, setRpe] = useState(5)
+  const [postWorkoutFatigue, setPostWorkoutFatigue] = useState(0)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -52,11 +75,24 @@ export function ManualLogForm({ onSaved }: ManualLogFormProps) {
     } else if (type === 'bowel_movement') {
       data = { count: bmCount, urgency, blood, consistency }
     } else if (type === 'meal') {
-      data = { description, calories: parseInt(calories) || 0, trigger_foods: triggerFoods }
+      data = {
+        description,
+        meal_type: mealType,
+        portion,
+        food_class: foodClass,
+        tags,
+      }
     } else if (type === 'sleep') {
       data = { duration_hours: sleepHours, quality: sleepQuality }
     } else if (type === 'exercise') {
-      data = { type: exerciseType, duration_minutes: duration, steps }
+      data = {
+        type: exerciseType,
+        focus: focus || undefined,
+        duration_minutes: duration,
+        intensity,
+        rpe,
+        post_workout_fatigue: postWorkoutFatigue,
+      }
     }
 
     await saveLogEntry(type, data, undefined, 'manual')
@@ -166,15 +202,30 @@ export function ManualLogForm({ onSaved }: ManualLogFormProps) {
             placeholder="What did you eat?"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
           <div className="flex items-center gap-3">
-            <label className="text-xs text-muted-foreground w-24">Calories</label>
-            <input type="number" value={calories} onChange={e => setCalories(e.target.value)}
-              placeholder="approx."
-              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <label className="text-xs text-muted-foreground w-24">Meal</label>
+            <select value={mealType} onChange={e => setMealType(e.target.value as MealType)}
+              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
+              {MEAL_TYPES.map(m => <option key={m} value={m}>{prettify(m)}</option>)}
+            </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-            <input type="checkbox" checked={triggerFoods} onChange={e => setTriggerFoods(e.target.checked)} className="accent-orange-400" />
-            Included trigger foods
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-muted-foreground w-24">Portion</label>
+            <select value={portion} onChange={e => setPortion(e.target.value as Portion)}
+              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
+              {PORTIONS.map(p => <option key={p} value={p}>{prettify(p)}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-muted-foreground w-24">Inflammation</label>
+            <select value={foodClass} onChange={e => setFoodClass(e.target.value as FoodClass)}
+              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
+              {FOOD_CLASSES.map(c => <option key={c} value={c}>{prettify(c)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1.5">IBD tags</label>
+            <TagChips value={tags} suggestions={TAG_SUGGESTIONS} onChange={setTags} />
+          </div>
         </div>
       )}
 
@@ -209,20 +260,43 @@ export function ManualLogForm({ onSaved }: ManualLogFormProps) {
             <label className="text-xs text-muted-foreground w-24">Type</label>
             <select value={exerciseType} onChange={e => setExerciseType(e.target.value)}
               className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
-              <option>Walk</option><option>Run</option><option>Cycling</option>
-              <option>Yoga</option><option>Swimming</option><option>Strength</option>
+              {EXERCISE_TYPES.map(t => <option key={t} value={t}>{prettify(t)}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-muted-foreground w-24">Focus</label>
+            <select value={focus} onChange={e => setFocus(e.target.value)}
+              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
+              <option value="">—</option>
+              {EXERCISE_FOCUS.map(f => <option key={f} value={f}>{prettify(f)}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-3">
             <label className="text-xs text-muted-foreground w-24">Duration (min)</label>
-            <input type="number" value={duration} onChange={e => setDuration(parseInt(e.target.value))}
+            <input type="number" value={duration} onChange={e => setDuration(parseInt(e.target.value) || 0)}
               className="w-20 text-sm rounded border border-border bg-background px-2 py-1 text-foreground focus:outline-none" />
           </div>
           <div className="flex items-center gap-3">
-            <label className="text-xs text-muted-foreground w-24">Steps</label>
-            <input type="number" value={steps} onChange={e => setSteps(parseInt(e.target.value))}
-              className="w-24 text-sm rounded border border-border bg-background px-2 py-1 text-foreground focus:outline-none" />
+            <label className="text-xs text-muted-foreground w-24">Intensity</label>
+            <select value={intensity} onChange={e => setIntensity(e.target.value as Intensity)}
+              className="flex-1 text-sm rounded border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none">
+              {INTENSITIES.map(i => <option key={i} value={i}>{prettify(i)}</option>)}
+            </select>
           </div>
+          {[
+            { label: 'Effort (RPE)', value: rpe, set: setRpe },
+            { label: 'Post-workout fatigue', value: postWorkoutFatigue, set: setPostWorkoutFatigue },
+          ].map(({ label, value, set }) => (
+            <div key={label}>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-muted-foreground">{label}</label>
+                <span className="text-xs font-semibold text-foreground">{value}/10</span>
+              </div>
+              <input type="range" min={0} max={10} value={value}
+                onChange={e => set(parseInt(e.target.value))}
+                className="w-full accent-primary" />
+            </div>
+          ))}
         </div>
       )}
 

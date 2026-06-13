@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EXTRACTION_FIELD_GUIDE } from '@/lib/health/log-schema'
+import { classifyFood } from '@/lib/ibd-aid'
 
 const SYSTEM_PROMPT = `You are a medical data extractor for a Crohn's disease health tracking app.
-Given a natural language health log entry, extract structured data and return valid JSON only.
+Given a natural language health log entry, extract structured data and return valid JSON only (no markdown, no explanation).
 
-Determine the SINGLE most relevant entry type from: bowel_movement, symptom, meal, medication, sleep, exercise.
+${EXTRACTION_FIELD_GUIDE}
 
-Return exactly this JSON shape (no markdown, no explanation, only JSON):
+Return exactly this JSON shape:
 {
   "entryType": "<type>",
   "summary": "<1–2 sentence plain-English summary>",
-  "data": {
-    // For bowel_movement: count (int), consistency ("formed"|"semi-formed"|"loose"|"watery"), blood (bool), urgency (0-10), pain_before (0-10)
-    // For symptom: pain_scale (0-10), fatigue (0-10), bloating (0-10), nausea (0-10), notes (string)
-    // For meal: description (string), calories (int estimate), trigger_foods (bool), trigger_notes (string if trigger)
-    // For medication: med_name (string), dose (string), taken (bool)
-    // For sleep: duration_hours (float), quality (1-10)
-    // For exercise: type (string), duration_minutes (int), steps (int)
-  }
+  "data": { /* only the fields for that entryType, per the guide above */ }
 }`
 
 export async function POST(req: NextRequest) {
@@ -99,19 +94,35 @@ function fallbackParse(transcript: string) {
   }
 
   if (lower.includes('ate') || lower.includes('eat') || lower.includes('food') || lower.includes('meal')) {
+    const hour = new Date().getHours()
+    const meal_type = hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 21 ? 'dinner' : 'snack'
     return {
       entryType: 'meal',
       summary: `Meal logged: "${transcript.slice(0, 80)}"`,
-      data: { description: transcript.slice(0, 100), calories: 500, trigger_foods: false },
+      data: {
+        description: transcript.slice(0, 100),
+        meal_type,
+        portion: 'medium',
+        food_class: classifyFood(transcript),
+        tags: [],
+      },
     }
   }
 
-  if (lower.includes('walk') || lower.includes('run') || lower.includes('exercise') || lower.includes('gym')) {
+  if (lower.includes('walk') || lower.includes('run') || lower.includes('exercise') || lower.includes('gym') || lower.includes('workout') || lower.includes('lift')) {
     const minsMatch = transcript.match(/(\d+)\s*min/i)
+    const type = lower.includes('run') ? 'run'
+      : lower.includes('cycle') || lower.includes('bike') ? 'cycling'
+      : lower.includes('lift') || lower.includes('strength') || lower.includes('weights') ? 'strength'
+      : lower.includes('yoga') ? 'yoga'
+      : 'walk'
+    const intensity = lower.includes('hard') || lower.includes('intense') ? 'hard'
+      : lower.includes('easy') || lower.includes('light') ? 'easy'
+      : 'moderate'
     return {
       entryType: 'exercise',
       summary: `Exercise logged: "${transcript.slice(0, 80)}"`,
-      data: { type: lower.includes('run') ? 'Run' : 'Walk', duration_minutes: minsMatch ? parseInt(minsMatch[1]) : 30, steps: 3000 },
+      data: { type, duration_minutes: minsMatch ? parseInt(minsMatch[1]) : 30, intensity },
     }
   }
 
