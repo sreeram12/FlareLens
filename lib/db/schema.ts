@@ -7,7 +7,7 @@ import {
   numeric,
   jsonb,
   date,
-  integer,
+  unique,
 } from 'drizzle-orm/pg-core'
 
 // ─── Log Entries ───────────────────────────────────────────────────────────────
@@ -69,8 +69,32 @@ export const medications = pgTable('medications', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+// ─── Findings ──────────────────────────────────────────────────────────────────
+// Surfaced by the background analyst agent (cron + on-open). One row per distinct
+// concern (dedupeKey); re-analysis upserts rather than duplicating.
+export const findings = pgTable(
+  'findings',
+  {
+    id: serial('id').primaryKey(),
+    patientId: text('patient_id').notNull().default('alex'),
+    type: text('type').notNull(), // 'flare_fingerprint' | 'nutrient_gap' | 'lab_shift' | 'med_adherence' | 'baseline_drift'
+    severity: text('severity').notNull().default('info'), // 'info' | 'watch' | 'alert'
+    title: text('title').notNull(),
+    detail: text('detail').notNull(),
+    signals: jsonb('signals').notNull().default('{}'),
+    dedupeKey: text('dedupe_key').notNull(),
+    status: text('status').notNull().default('new'), // 'new' | 'read' | 'dismissed'
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    patientDedupe: unique('findings_patient_dedupe_unique').on(t.patientId, t.dedupeKey),
+  })
+)
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type LogEntry = typeof logEntries.$inferSelect
+export type Finding = typeof findings.$inferSelect
 export type NewLogEntry = typeof logEntries.$inferInsert
 export type DailyStabilityScore = typeof dailyStabilityScores.$inferSelect
 export type FlareSession = typeof flareSessions.$inferSelect
