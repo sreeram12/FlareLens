@@ -235,6 +235,64 @@ export const IBD_FOOD_TAGS: readonly IbdFoodTag[] = [
 /** Tag ids only — handy for prompt vocabularies and validation. */
 export const IBD_FOOD_TAG_IDS: readonly string[] = IBD_FOOD_TAGS.map((t) => t.id)
 
+const TAG_BY_ID = new Map(IBD_FOOD_TAGS.map((t) => [t.id, t]))
+
+/** Look up a tag's display label (falls back to a prettified id). */
+export function tagLabel(id: string): string {
+  return TAG_BY_ID.get(id)?.label ?? id.replace(/[-_]/g, ' ')
+}
+
+/** A tag's inflammation lean, for coloring chips. */
+export function tagLean(id: string): FoodClass {
+  return TAG_BY_ID.get(id)?.lean ?? 'neutral'
+}
+
+export type MealVerdictKind = 'good' | 'ok' | 'caution' | 'limit'
+
+export interface MealVerdict {
+  kind: MealVerdictKind
+  label: string
+  /** Semantic tone for UI. */
+  tone: 'emerald' | 'yellow' | 'orange' | 'muted'
+  note: string
+}
+
+/**
+ * Judge a logged meal against the patient's CURRENT IBD-AID phase — the key
+ * insight that the "right" food is phase-dependent: cruciferous/raw veg and high
+ * insoluble fiber are great in remission (Phase 3) but should be eased off during
+ * an active flare (Phase 1). Pro-inflammatory foods are limited in every phase.
+ */
+export function evaluateMealForPhase(
+  foodClass: FoodClass | undefined,
+  tagIds: string[],
+  phase: AidPhase
+): MealVerdict {
+  const easeOff = IBD_FOOD_TAGS.filter((t) => t.easeOffInFlare && tagIds.includes(t.id)).map((t) => t.label)
+
+  if (foodClass === 'pro-inflammatory') {
+    return { kind: 'limit', label: 'Limit', tone: 'orange', note: 'Pro-inflammatory — best kept occasional.' }
+  }
+  // During a flare, otherwise-healthy high-fiber/raw foods are hard to tolerate.
+  if (phase === 1 && easeOff.length > 0) {
+    return {
+      kind: 'caution',
+      label: 'Ease off in flare',
+      tone: 'yellow',
+      note: `${easeOff.join(', ')} — gentler to ease off and cook well during a flare (Phase 1).`,
+    }
+  }
+  if (foodClass === 'anti-inflammatory') {
+    return {
+      kind: 'good',
+      label: phase === 3 ? 'On plan' : 'Good choice',
+      tone: 'emerald',
+      note: phase === 3 ? 'Anti-inflammatory — great for maintenance.' : 'Anti-inflammatory and fits your current phase.',
+    }
+  }
+  return { kind: 'ok', label: 'Neutral', tone: 'muted', note: '' }
+}
+
 const ANTI_INFLAMMATORY_TERMS = [
   'salmon', 'mackerel', 'sardine', 'tuna', 'trout', 'herring', 'anchovy', 'omega',
   'olive oil', 'avocado', 'flax', 'chia', 'walnut',

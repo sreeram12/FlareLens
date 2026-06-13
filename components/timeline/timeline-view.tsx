@@ -4,17 +4,26 @@ import { useMemo, useState } from 'react'
 import { format, isToday, isYesterday, isSameDay } from 'date-fns'
 import type { LogEntry } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
-import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle, Scale } from 'lucide-react'
+import {
+  Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle, Scale,
+  HeartPulse, Check, AlertTriangle, Footprints, Wind, Salad,
+} from 'lucide-react'
 import { getScoreLabel } from '@/lib/stability-score'
+import { evaluateMealForPhase, tagLabel, tagLean, type AidPhase, type FoodClass } from '@/lib/ibd-aid'
 
-const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color: string; dot: string }> = {
-  bowel_movement: { label: 'BM',       icon: Droplets,  color: 'text-blue-400',    dot: 'bg-blue-400' },
-  symptom:        { label: 'Symptom',  icon: Heart,     color: 'text-pink-400',    dot: 'bg-pink-400' },
-  meal:           { label: 'Meal',     icon: Utensils,  color: 'text-teal-400',    dot: 'bg-teal-400' },
-  medication:     { label: 'Med',      icon: Pill,      color: 'text-purple-400',  dot: 'bg-purple-400' },
-  sleep:          { label: 'Sleep',    icon: Moon,      color: 'text-indigo-400',  dot: 'bg-indigo-400' },
-  exercise:       { label: 'Exercise', icon: Dumbbell,  color: 'text-emerald-400', dot: 'bg-emerald-400' },
-  weight:         { label: 'Weight',   icon: Scale,     color: 'text-amber-400',   dot: 'bg-amber-400' },
+type Data = Record<string, unknown>
+
+const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color: string; accent: string }> = {
+  bowel_movement: { label: 'Bowel', icon: Droplets, color: 'text-blue-400', accent: 'border-l-blue-400/70' },
+  symptom: { label: 'Symptom', icon: Heart, color: 'text-pink-400', accent: 'border-l-pink-400/70' },
+  meal: { label: 'Meal', icon: Utensils, color: 'text-teal-400', accent: 'border-l-teal-400/70' },
+  medication: { label: 'Medication', icon: Pill, color: 'text-purple-400', accent: 'border-l-purple-400/70' },
+  sleep: { label: 'Sleep', icon: Moon, color: 'text-indigo-400', accent: 'border-l-indigo-400/70' },
+  exercise: { label: 'Exercise', icon: Dumbbell, color: 'text-emerald-400', accent: 'border-l-emerald-400/70' },
+  wearable: { label: 'Wearable', icon: HeartPulse, color: 'text-cyan-400', accent: 'border-l-cyan-400/70' },
+  weight: { label: 'Body', icon: Scale, color: 'text-amber-400', accent: 'border-l-amber-400/70' },
+  lab: { label: 'Lab', icon: Activity, color: 'text-violet-400', accent: 'border-l-violet-400/70' },
+  clinical: { label: 'Record', icon: Activity, color: 'text-violet-400', accent: 'border-l-violet-400/70' },
 }
 
 interface ScoreDay {
@@ -26,42 +35,21 @@ interface ScoreDay {
 interface TimelineViewProps {
   entries: LogEntry[]
   scoreHistory: ScoreDay[]
+  phase: AidPhase
+  phaseName: string
 }
 
-type FilterType = 'all' | 'bowel_movement' | 'symptom' | 'meal' | 'medication' | 'sleep' | 'exercise' | 'weight'
+type FilterType = 'all' | 'meal' | 'symptom' | 'wearable' | 'bowel_movement' | 'medication' | 'exercise'
 
-function entryOneLiner(entry: LogEntry): string {
-  const d = entry.data as Record<string, unknown>
-  switch (entry.entryType) {
-    case 'bowel_movement':
-      return `${d.count ?? '?'} BM · Urgency ${d.urgency ?? '?'}/10${d.blood ? ' · Blood' : ''}`
-    case 'symptom':
-      return `Pain ${d.pain_scale ?? '?'} · Fatigue ${d.fatigue ?? '?'}${d.notes ? ` · "${String(d.notes).slice(0, 40)}"` : ''}`
-    case 'meal': {
-      const macros = [
-        d.protein_g !== undefined ? `P${d.protein_g}` : null,
-        d.carbs_g !== undefined ? `C${d.carbs_g}` : null,
-        d.fat_g !== undefined ? `F${d.fat_g}` : null,
-      ].filter(Boolean).join(' / ')
-      return `${d.description ?? 'Meal'} · ${d.calories ?? '?'} kcal${macros ? ` · ${macros}` : ''}${d.trigger_foods ? ' · Trigger' : ''}`
-    }
-    case 'medication':
-      return `${d.med_name ?? 'Med'} ${d.taken === false ? '(missed)' : '(taken)'}`
-    case 'sleep':
-      return `${d.duration_hours ?? '?'}h · Quality ${d.quality ?? '?'}/10`
-    case 'exercise':
-      return `${d.type ?? 'Exercise'} ${d.duration_minutes ?? '?'} min · ${Number(d.steps ?? 0).toLocaleString()} steps`
-    case 'weight': {
-      const parts: string[] = []
-      if (d.weight_kg !== undefined && d.weight_kg !== null) parts.push(`${d.weight_kg} kg${d.is_trend ? ' (trend)' : ''}`)
-      if (d.fat_percent !== undefined && d.fat_percent !== null) parts.push(`${d.fat_percent}% fat`)
-      if (d.steps !== undefined && d.steps !== null) parts.push(`${Number(d.steps).toLocaleString()} steps`)
-      return parts.join(' · ') || 'Body metrics'
-    }
-    default:
-      return JSON.stringify(d).slice(0, 60)
-  }
-}
+const FILTERS: { value: FilterType; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'meal', label: 'Meals' },
+  { value: 'symptom', label: 'Symptoms' },
+  { value: 'wearable', label: 'Wearables' },
+  { value: 'bowel_movement', label: 'Gut' },
+  { value: 'medication', label: 'Meds' },
+  { value: 'exercise', label: 'Exercise' },
+]
 
 function dayLabel(date: Date): string {
   if (isToday(date)) return 'Today'
@@ -73,55 +61,47 @@ function groupByDay(entries: LogEntry[]) {
   const groups: { date: Date; entries: LogEntry[] }[] = []
   for (const entry of entries) {
     const d = new Date(entry.loggedAt)
-    const existing = groups.find(g => isSameDay(g.date, d))
-    if (existing) {
-      existing.entries.push(entry)
-    } else {
-      groups.push({ date: d, entries: [entry] })
-    }
+    const existing = groups.find((g) => isSameDay(g.date, d))
+    if (existing) existing.entries.push(entry)
+    else groups.push({ date: d, entries: [entry] })
   }
   return groups.sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
-export function TimelineView({ entries, scoreHistory }: TimelineViewProps) {
+export function TimelineView({ entries, scoreHistory, phase, phaseName }: TimelineViewProps) {
   const [filter, setFilter] = useState<FilterType>('all')
 
-  const filtered = useMemo(() => {
-    if (filter === 'all') return entries
-    return entries.filter(e => e.entryType === filter)
-  }, [entries, filter])
-
+  const filtered = useMemo(
+    () => (filter === 'all' ? entries : entries.filter((e) => e.entryType === filter)),
+    [entries, filter]
+  )
   const grouped = useMemo(() => groupByDay(filtered), [filtered])
-
   const scoreMap = useMemo(() => {
     const m: Record<string, ScoreDay> = {}
     for (const s of scoreHistory) m[s.date] = s
     return m
   }, [scoreHistory])
 
-  const filterOptions: { value: FilterType; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'bowel_movement', label: 'BM' },
-    { value: 'symptom', label: 'Symptoms' },
-    { value: 'meal', label: 'Meals' },
-    { value: 'medication', label: 'Meds' },
-    { value: 'sleep', label: 'Sleep' },
-    { value: 'exercise', label: 'Exercise' },
-    { value: 'weight', label: 'Weight' },
-  ]
-
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter chips */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
-        {filterOptions.map(opt => (
+      {/* Phase context for meal verdicts */}
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2">
+        <Salad className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Meals are rated for your current phase — <span className="text-foreground font-medium">{phaseName}</span>
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 lg:mx-0 lg:px-0 lg:flex-wrap scrollbar-hide">
+        {FILTERS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setFilter(opt.value)}
             className={cn(
               'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
               filter === opt.value
-                ? 'bg-primary/20 border-primary/50 text-primary'
+                ? 'bg-primary/15 border-primary/50 text-primary'
                 : 'bg-card border-border text-muted-foreground hover:text-foreground'
             )}
           >
@@ -130,74 +110,250 @@ export function TimelineView({ entries, scoreHistory }: TimelineViewProps) {
         ))}
       </div>
 
-      {/* Grouped timeline */}
       {grouped.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">No entries found</p>
+          <p className="text-sm text-muted-foreground">No entries found.</p>
         </div>
       ) : (
         grouped.map(({ date, entries: dayEntries }) => {
-          const dateStr = format(date, 'yyyy-MM-dd')
-          const scoreDay = scoreMap[dateStr]
-
+          const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
           return (
-            <div key={dateStr}>
-              {/* Day header */}
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {dayLabel(date)}
-                </p>
-                {scoreDay && (
-                  <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />
-                )}
+            <section key={date.toISOString()} className="flex flex-col gap-2">
+              <div className="flex items-center justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-1">
+                <p className="label-mono">{dayLabel(date)}</p>
+                {scoreDay && <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />}
               </div>
 
-              {/* Entries */}
-              <div className="flex flex-col gap-0.5">
-                {dayEntries.map((entry, i) => {
-                  const meta = ENTRY_META[entry.entryType] ?? { label: entry.entryType, icon: Circle, color: 'text-muted-foreground', dot: 'bg-muted-foreground' }
+              <div className="flex flex-col gap-2">
+                {dayEntries.map((entry) => {
+                  const meta = ENTRY_META[entry.entryType] ?? {
+                    label: entry.entryType, icon: Circle, color: 'text-muted-foreground', accent: 'border-l-border',
+                  }
                   const Icon = meta.icon
-                  const isLast = i === dayEntries.length - 1
-
                   return (
-                    <div key={entry.id} className="flex gap-3">
-                      {/* Timeline spine */}
-                      <div className="flex flex-col items-center w-5 flex-shrink-0">
-                        <div className={cn('h-2.5 w-2.5 rounded-full mt-3 flex-shrink-0', meta.dot)} />
-                        {!isLast && <div className="w-px flex-1 bg-border mt-1 min-h-[20px]" />}
-                      </div>
-                      {/* Content */}
-                      <div className="flex-1 rounded-lg border border-border bg-card p-3 mb-1">
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <Icon className={cn('h-3 w-3', meta.color)} strokeWidth={2.5} />
-                            <span className={cn('text-xs font-semibold uppercase tracking-wide', meta.color)}>
-                              {meta.label}
+                    <div
+                      key={entry.id}
+                      className={cn('rounded-lg border border-border border-l-2 bg-card p-3', meta.accent)}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Icon className={cn('h-3.5 w-3.5', meta.color)} strokeWidth={2.4} />
+                          <span className={cn('text-[11px] font-semibold uppercase tracking-wide', meta.color)}>
+                            {meta.label}
+                          </span>
+                          {entry.source !== 'manual' && entry.source !== 'voice' && (
+                            <span className="text-[10px] text-muted-foreground/60 capitalize">
+                              · {entry.source.replace('_', ' ')}
                             </span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(entry.loggedAt), 'h:mm a')}
-                          </span>
+                          )}
                         </div>
-                        <p className="text-sm text-foreground leading-relaxed">
-                          {entryOneLiner(entry)}
-                        </p>
-                        {entry.source !== 'manual' && (
-                          <span className="text-xs text-muted-foreground/60 mt-0.5 block capitalize">
-                            via {entry.source.replace('_', ' ')}
-                          </span>
-                        )}
+                        <span className="text-[11px] text-muted-foreground tabular-nums">
+                          {format(new Date(entry.loggedAt), 'h:mm a')}
+                        </span>
                       </div>
+                      <EntryBody entry={entry} phase={phase} />
                     </div>
                   )
                 })}
               </div>
-            </div>
+            </section>
           )
         })
       )}
     </div>
   )
+}
+
+// ─── Per-type bodies ──────────────────────────────────────────────────────────
+
+function EntryBody({ entry, phase }: { entry: LogEntry; phase: AidPhase }) {
+  const d = (entry.data ?? {}) as Data
+  switch (entry.entryType) {
+    case 'meal': return <MealBody d={d} phase={phase} />
+    case 'wearable': return <WearableBody d={d} />
+    case 'symptom': return <SymptomBody d={d} />
+    case 'bowel_movement': return <BowelBody d={d} />
+    case 'medication': return <MedBody d={d} />
+    case 'sleep': return <Stats stats={[st(Moon, 'Sleep', n(d.duration_hours, 'h')), st(Heart, 'Quality', n(d.quality, '/10'))]} />
+    case 'exercise': return <ExerciseBody d={d} />
+    case 'weight': return <WeightBody d={d} />
+    case 'lab':
+    case 'clinical': return <p className="text-sm text-foreground">{String(d.lab_name ?? d.text ?? 'Record')}{d.value != null ? `: ${d.value}${d.unit ? ' ' + d.unit : ''}` : ''}</p>
+    default: return <p className="text-sm text-muted-foreground">{String(d.summary ?? d.description ?? 'Entry')}</p>
+  }
+}
+
+function MealBody({ d, phase }: { d: Data; phase: AidPhase }) {
+  const tags = Array.isArray(d.tags) ? d.tags.map(String) : []
+  const foodClass = typeof d.food_class === 'string' ? (d.food_class as FoodClass) : undefined
+  const verdict = (foodClass || tags.length) ? evaluateMealForPhase(foodClass, tags, phase) : null
+
+  const macros = [
+    d.calories != null ? `${Math.round(Number(d.calories))} kcal` : null,
+    d.protein_g != null ? `P ${d.protein_g}g` : null,
+    d.carbs_g != null ? `C ${d.carbs_g}g` : null,
+    d.fat_g != null ? `F ${d.fat_g}g` : null,
+    d.fiber_g != null ? `Fiber ${d.fiber_g}g` : null,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">{String(d.description ?? 'Meal')}</p>
+        {verdict && <VerdictBadge v={verdict} />}
+      </div>
+      {macros && <p className="text-xs text-muted-foreground mt-0.5">{macros}</p>}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {tags.map((t) => {
+            const lean = tagLean(t)
+            return (
+              <span
+                key={t}
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  lean === 'anti-inflammatory' ? 'bg-emerald-500/10 text-emerald-300'
+                    : lean === 'pro-inflammatory' ? 'bg-orange-500/10 text-orange-300'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {tagLabel(t)}
+              </span>
+            )
+          })}
+        </div>
+      )}
+      {verdict?.note && <p className="text-[11px] text-muted-foreground/80 mt-1.5 leading-relaxed">{verdict.note}</p>}
+    </div>
+  )
+}
+
+function VerdictBadge({ v }: { v: ReturnType<typeof evaluateMealForPhase> }) {
+  const TONE: Record<string, string> = {
+    emerald: 'bg-emerald-500/10 text-emerald-400',
+    yellow: 'bg-yellow-500/10 text-yellow-400',
+    orange: 'bg-orange-500/10 text-orange-400',
+    muted: 'bg-muted text-muted-foreground',
+  }
+  const Icon = v.kind === 'good' ? Check : v.kind === 'ok' ? null : AlertTriangle
+  return (
+    <span className={cn('shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold', TONE[v.tone])}>
+      {Icon && <Icon className="h-3 w-3" strokeWidth={2.6} />}
+      {v.label}
+    </span>
+  )
+}
+
+function WearableBody({ d }: { d: Data }) {
+  const stats = [
+    d.sleep_hours != null ? st(Moon, 'Sleep', `${d.sleep_hours}h`) : null,
+    d.resting_hr != null ? st(Heart, 'RHR', `${d.resting_hr}`) : null,
+    d.hrv != null ? st(Activity, 'HRV', `${d.hrv}`) : null,
+    d.respiratory_rate != null ? st(Wind, 'Resp', `${d.respiratory_rate}`) : null,
+    d.steps != null ? st(Footprints, 'Steps', Number(d.steps).toLocaleString()) : null,
+  ].filter(Boolean) as StatItem[]
+  if (stats.length === 0) return <p className="text-sm text-muted-foreground">No wearable metrics</p>
+  return <Stats stats={stats} />
+}
+
+function SymptomBody({ d }: { d: Data }) {
+  const items: [string, number][] = ([
+    ['Pain', d.pain_scale], ['Fatigue', d.fatigue], ['Bloating', d.bloating], ['Nausea', d.nausea],
+  ] as [string, unknown][]).filter(([, v]) => v != null).map(([l, v]) => [l, Number(v)])
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map(([label, v]) => (
+          <span key={label} className={cn('rounded-md px-2 py-0.5 text-[11px] font-medium tabular-nums', sevTone(v))}>
+            {label} {v}/10
+          </span>
+        ))}
+      </div>
+      {typeof d.notes === 'string' && d.notes && (
+        <p className="text-xs text-muted-foreground mt-1.5 italic">“{d.notes}”</p>
+      )}
+    </div>
+  )
+}
+
+function BowelBody({ d }: { d: Data }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 text-[11px]">
+      <Pill2>{`${d.count ?? '?'} movements`}</Pill2>
+      {d.consistency != null && <Pill2>{String(d.consistency)}</Pill2>}
+      {d.urgency != null && <span className={cn('rounded-md px-2 py-0.5 font-medium tabular-nums', sevTone(Number(d.urgency)))}>Urgency {String(d.urgency)}/10</span>}
+      {d.blood ? <span className="rounded-md px-2 py-0.5 font-semibold bg-red-500/15 text-red-400">Blood</span> : null}
+    </div>
+  )
+}
+
+function MedBody({ d }: { d: Data }) {
+  const taken = d.taken !== false
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-sm text-foreground">{String(d.med_name ?? 'Medication')}{d.dose ? ` · ${d.dose}` : ''}</span>
+      <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', taken ? 'bg-emerald-500/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400')}>
+        {taken ? 'Taken' : 'Missed'}
+      </span>
+    </div>
+  )
+}
+
+function ExerciseBody({ d }: { d: Data }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 text-[11px]">
+      <Pill2 className="capitalize">{String(d.type ?? 'Exercise')}{d.focus ? ` · ${d.focus}` : ''}</Pill2>
+      {d.duration_minutes != null && <Pill2>{`${d.duration_minutes} min`}</Pill2>}
+      {d.intensity != null && <Pill2 className="capitalize">{String(d.intensity)}</Pill2>}
+      {d.rpe != null && <Pill2>RPE {String(d.rpe)}</Pill2>}
+      {d.post_workout_fatigue != null && <span className={cn('rounded-md px-2 py-0.5 font-medium tabular-nums', sevTone(Number(d.post_workout_fatigue)))}>Post-fatigue {String(d.post_workout_fatigue)}/10</span>}
+      {d.steps != null && <Pill2>{`${Number(d.steps).toLocaleString()} steps`}</Pill2>}
+    </div>
+  )
+}
+
+function WeightBody({ d }: { d: Data }) {
+  const stats = [
+    d.weight_kg != null ? st(Scale, d.is_trend ? 'Trend' : 'Weight', `${d.weight_kg} kg`) : null,
+    d.fat_percent != null ? st(Activity, 'Body fat', `${d.fat_percent}%`) : null,
+    d.steps != null ? st(Footprints, 'Steps', Number(d.steps).toLocaleString()) : null,
+  ].filter(Boolean) as StatItem[]
+  if (stats.length === 0) return <p className="text-sm text-muted-foreground">Body metrics</p>
+  return <Stats stats={stats} />
+}
+
+// ─── Small shared bits ──────────────────────────────────────────────────────
+
+interface StatItem { icon: React.ElementType; label: string; val: string }
+function st(icon: React.ElementType, label: string, val: string): StatItem { return { icon, label, val } }
+function n(v: unknown, suffix: string): string { return v == null ? '—' : `${v}${suffix}` }
+
+function Stats({ stats }: { stats: StatItem[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {stats.map((s) => {
+        const Icon = s.icon
+        return (
+          <span key={s.label} className="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 text-xs">
+            <Icon className="h-3 w-3 text-muted-foreground" />
+            <span className="text-muted-foreground">{s.label}</span>
+            <span className="font-semibold text-foreground tabular-nums">{s.val}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function Pill2({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={cn('rounded-md bg-muted/60 px-2 py-0.5 text-foreground', className)}>{children}</span>
+}
+
+function sevTone(v: number): string {
+  if (v >= 6) return 'bg-red-500/10 text-red-400'
+  if (v >= 4) return 'bg-orange-500/10 text-orange-400'
+  if (v >= 1) return 'bg-yellow-500/10 text-yellow-400'
+  return 'bg-muted text-muted-foreground'
 }
 
 function ScorePill({ score }: { score: number; isFlareDay: boolean }) {
