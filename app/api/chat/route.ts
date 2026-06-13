@@ -1,8 +1,6 @@
 import { streamText, convertToModelMessages, tool, stepCountIs, type UIMessage } from 'ai'
 import { createXai } from '@ai-sdk/xai'
 import { z } from 'zod'
-
-const xai = createXai({ apiKey: process.env.AI_GATEWAY_API_KEY })
 import {
   saveLogEntry,
   getTodayScore,
@@ -12,6 +10,8 @@ import {
   getScoreHistory,
   computeAndSaveTodayScore,
 } from '@/lib/actions'
+
+const xai = createXai({ apiKey: process.env.AI_GATEWAY_API_KEY })
 
 export const maxDuration = 30
 
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
   const result = streamText({
-    model: 'openai/gpt-5-mini',
+    model: xai('grok-3'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     stopWhen: stepCountIs(6),
@@ -162,10 +162,10 @@ export async function POST(req: Request) {
       console.error('[v0] Chat stream error:', error)
       const msg = error instanceof Error ? error.message : String(error)
       if (/auth|api key|unauthenticat/i.test(msg)) {
-        return "I can't reach the AI service right now — the AI Gateway API key looks invalid or missing. Please add a valid AI_GATEWAY_API_KEY in project settings."
+        return "I can't reach the AI service right now — the xAI API key looks invalid or missing. Please check the API key in project settings."
       }
-      if (/rate.?limit|429|credits|free tier/i.test(msg)) {
-        return "The AI service is rate-limited on the free tier at the moment. Adding AI Gateway credits or a paid key will fix this."
+      if (/rate.?limit|429|credits|quota/i.test(msg)) {
+        return "The AI service is rate-limited or out of credits at the moment. Please try again shortly."
       }
       return 'Something went wrong reaching the assistant. Please try again in a moment.'
     },
