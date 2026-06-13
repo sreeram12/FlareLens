@@ -25,8 +25,8 @@ const DOMAIN_ICONS: Record<string, React.ElementType> = {
 const DOMAIN_INFO: Record<string, { weight: string; description: string; measures: string[] }> = {
   gut: {
     weight: '30%',
-    description: 'Tracks bowel activity — the strongest signal of Crohn\u2019s disease activity.',
-    measures: ['Bowel movement frequency vs. baseline', 'Urgency level', 'Abdominal pain', 'Blood in stool'],
+    description: 'Overall Crohn\u2019s disease activity — pain, urgency, bloating and inflammation, not just stool frequency.',
+    measures: ['Abdominal pain & cramping', 'Urgency level', 'Bloating', 'Blood in stool', 'Stool frequency vs. baseline'],
   },
   energy: {
     weight: '20%',
@@ -35,8 +35,8 @@ const DOMAIN_INFO: Record<string, { weight: string; description: string; measure
   },
   nutrition: {
     weight: '15%',
-    description: 'Diet patterns that can drive or calm gut inflammation.',
-    measures: ['Calorie intake vs. baseline', 'Trigger foods consumed'],
+    description: 'How closely today\u2019s food follows an anti-inflammatory (IBD-AID) pattern that helps calm gut inflammation.',
+    measures: ['Anti-inflammatory foods (omega-3, probiotics, soluble fiber)', 'Pro-inflammatory foods (refined sugar, fried & processed)', 'Known trigger foods', 'Adequate intake during flares'],
   },
   medications: {
     weight: '15%',
@@ -120,6 +120,8 @@ function summarizeEntry(domain: string, entry: LogEntry): string {
     if (d.duration_hours != null) parts.push(`${Number(d.duration_hours).toFixed(1)}h sleep`)
     if (d.quality != null) parts.push(`quality ${Number(d.quality)}/10`)
   } else if (t === 'meal') {
+    const desc = (d.description as string) || (d.food as string) || (d.name as string)
+    if (desc && desc !== 'Daily nutrition (MacroFactor)') parts.push(desc)
     if (d.calories != null) parts.push(`${Number(d.calories).toLocaleString()} kcal`)
     if (d.protein_g != null) parts.push(`${Number(d.protein_g)}g protein`)
     if (d.trigger_foods) parts.push('trigger foods')
@@ -144,7 +146,7 @@ function summarizeEntry(domain: string, entry: LogEntry): string {
 const REASON_KEYWORDS: Record<string, RegExp> = {
   gut: /\bBMs?\b|blood|urgency|pain/i,
   energy: /sleep|fatigue/i,
-  nutrition: /trigger food|caloric|kcal|calorie/i,
+  nutrition: /trigger food|caloric|kcal|calorie|inflammatory|anti-inflammatory/i,
   medications: /medication|dose/i,
   exercise: /activity|steps/i,
   clinical: /CRP|WBC/i,

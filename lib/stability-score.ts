@@ -44,6 +44,9 @@ export interface DayData {
   energyLevel: number        // 0–10
   caloriesConsumed: number
   triggerFoodsConsumed: boolean
+  antiInflammatoryFoods: number // # of anti-inflammatory food entries today
+  proInflammatoryFoods: number  // # of pro-inflammatory food entries today
+  mealsLogged: number           // total meal/food entries today
   medsAdherent: boolean
   stepsWalked: number
   exerciseMinutes: number
@@ -79,24 +82,29 @@ function devScore(actual: number, baseline: number, maxDev: number, weight: numb
 export function computeStabilityScore(data: DayData, baseline: Baseline): StabilityResult {
   const reasons: string[] = []
 
-  // ── GUT (30 pts) ────────────────────────────────────────────────────────────
-  // BM count deviation (max ±5 from baseline)
-  const bmDev = devScore(data.bowelMovements, baseline.bowel_movements_per_day, 5, 12)
+  // ── DISEASE ACTIVITY (30 pts) ───────────────────────────────────────────────
+  // Crohn's is a whole-gut inflammatory disease — not just stool frequency.
+  // We weight pain, urgency, bloating and blood alongside (de-emphasized) BM count.
+  // BM count deviation (max ±5 from baseline) — capped lower so it isn't the headline
+  const bmDev = devScore(data.bowelMovements, baseline.bowel_movements_per_day, 5, 7)
   // Urgency
-  const urgencyScore = (data.urgencyLevel / 10) * 8
-  // Pain
-  const painScore = (data.painScale / 10) * 8
+  const urgencyScore = (data.urgencyLevel / 10) * 7
+  // Abdominal pain — a primary symptom of active disease
+  const painScore = (data.painScale / 10) * 9
+  // Bloating / cramping
+  const bloatingScore = (data.bloating / 10) * 4
   // Blood
-  const bloodScore = data.bloodInStool ? 2 : 0
+  const bloodScore = data.bloodInStool ? 3 : 0
 
-  const gut = clamp(bmDev + urgencyScore + painScore + bloodScore, 0, 30)
+  const gut = clamp(bmDev + urgencyScore + painScore + bloatingScore + bloodScore, 0, 30)
 
-  if (data.bowelMovements > baseline.bowel_movements_per_day + 2) {
-    reasons.push(`${data.bowelMovements} BMs today vs. baseline of ${baseline.bowel_movements_per_day}`)
-  }
+  if (data.painScale >= 5) reasons.push(`Significant abdominal pain (${data.painScale}/10)`)
   if (data.bloodInStool) reasons.push('Blood detected in stool')
   if (data.urgencyLevel >= 6) reasons.push(`High urgency level (${data.urgencyLevel}/10)`)
-  if (data.painScale >= 5) reasons.push(`Significant abdominal pain (${data.painScale}/10)`)
+  if (data.bloating >= 6) reasons.push(`Notable bloating / cramping (${data.bloating}/10)`)
+  if (data.bowelMovements > baseline.bowel_movements_per_day + 2) {
+    reasons.push(`Stool frequency above baseline (${data.bowelMovements} vs. ${baseline.bowel_movements_per_day})`)
+  }
 
   // ── ENERGY/SLEEP (20 pts) ───────────────────────────────────────────────────
   const sleepDev = devScore(data.sleepHours, baseline.sleep_hours, 3, 8)
@@ -110,14 +118,35 @@ export function computeStabilityScore(data: DayData, baseline: Baseline): Stabil
   }
   if (data.fatigue >= 6) reasons.push(`High fatigue reported (${data.fatigue}/10)`)
 
-  // ── NUTRITION (15 pts) ──────────────────────────────────────────────────────
-  const calDev = devScore(data.caloriesConsumed, baseline.calories_per_day, 800, 10)
-  const triggerScore = data.triggerFoodsConsumed ? 5 : 0
+  // ── NUTRITION / ANTI-INFLAMMATORY DIET (15 pts) ─────────────────────────────
+  // Scores adherence to an anti-inflammatory (IBD-AID) eating pattern.
+  // Pro-inflammatory foods add deviation; anti-inflammatory foods reduce it.
+  // Under-eating still matters during flares, so caloric shortfall is included.
+  const calShortfall =
+    data.caloriesConsumed < baseline.calories_per_day * 0.7 && data.caloriesConsumed > 0
+      ? devScore(data.caloriesConsumed, baseline.calories_per_day, 900, 4)
+      : 0
 
-  const nutrition = clamp(calDev + triggerScore, 0, 15)
+  // Pro-inflammatory load: each pro-inflammatory food adds up to ~3.5 pts (cap 9)
+  const proLoad = clamp(data.proInflammatoryFoods * 3.5, 0, 9)
+  // Anti-inflammatory credit: each AID-friendly food offsets up to ~1.5 pts
+  const antiCredit = clamp(data.antiInflammatoryFoods * 1.5, 0, 6)
 
-  if (data.triggerFoodsConsumed) reasons.push('Trigger foods consumed today')
-  if (data.caloriesConsumed < baseline.calories_per_day * 0.6) {
+  // Legacy explicit trigger flag still contributes
+  const triggerScore = data.triggerFoodsConsumed ? 3 : 0
+
+  const nutrition = clamp(proLoad + triggerScore + calShortfall - antiCredit, 0, 15)
+
+  if (data.proInflammatoryFoods > 0) {
+    reasons.push(
+      `${data.proInflammatoryFoods} pro-inflammatory food${data.proInflammatoryFoods !== 1 ? 's' : ''} logged today`
+    )
+  }
+  if (data.antiInflammatoryFoods >= 2) {
+    reasons.push(`${data.antiInflammatoryFoods} anti-inflammatory foods support recovery`)
+  }
+  if (data.triggerFoodsConsumed) reasons.push('Known trigger foods consumed today')
+  if (data.caloriesConsumed < baseline.calories_per_day * 0.6 && data.caloriesConsumed > 0) {
     reasons.push(`Low caloric intake (${data.caloriesConsumed} kcal)`)
   }
 
@@ -196,9 +225,9 @@ export function getDomainLabel(domain: keyof DomainScores): {
   icon: string
 } {
   const map: Record<keyof DomainScores, { name: string; maxScore: number; icon: string }> = {
-    gut: { name: 'Gut Activity', maxScore: 30, icon: 'gut' },
+    gut: { name: 'Disease Activity', maxScore: 30, icon: 'gut' },
     energy: { name: 'Energy & Sleep', maxScore: 20, icon: 'energy' },
-    nutrition: { name: 'Nutrition', maxScore: 15, icon: 'nutrition' },
+    nutrition: { name: 'Anti-Inflammatory Diet', maxScore: 15, icon: 'nutrition' },
     medications: { name: 'Medications', maxScore: 15, icon: 'medications' },
     exercise: { name: 'Exercise', maxScore: 10, icon: 'exercise' },
     clinical: { name: 'Clinical', maxScore: 5, icon: 'clinical' },

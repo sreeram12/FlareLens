@@ -5,6 +5,7 @@ import { logEntries, dailyStabilityScores, flareSessions, patientBaselines, medi
 import { desc, eq, and, gte, lte, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { computeStabilityScore, type Baseline, type DayData } from '@/lib/stability-score'
+import { classifyFood, getPhaseForScore, getPhaseInfo } from '@/lib/ibd-aid'
 
 const PATIENT_ID = 'alex'
 
@@ -150,6 +151,37 @@ export async function getTodayScore() {
     .limit(1)
 
   return fresh[0] ?? null
+}
+
+// ─── Diet / IBD-AID Guidance ────────────────────────────────────────────────
+
+export async function getDietGuidance() {
+  const score = await getTodayScore()
+  const totalScore = score ? parseFloat(score.totalScore as string) : 0
+  const phase = getPhaseForScore(totalScore)
+
+  // Count today's anti-/pro-inflammatory meals for the at-a-glance summary
+  const today = new Date().toISOString().split('T')[0]
+  const entries = await getLogEntriesForDate(today)
+  let anti = 0
+  let pro = 0
+  for (const entry of entries) {
+    if (entry.entryType !== 'meal') continue
+    const d = entry.data as Record<string, unknown>
+    const desc = [d.description, d.food, d.name, entry.rawTranscript].filter(Boolean).join(' ')
+    if (!desc) continue
+    const cls = classifyFood(desc)
+    if (cls === 'anti-inflammatory') anti++
+    else if (cls === 'pro-inflammatory') pro++
+  }
+
+  return {
+    totalScore,
+    phase,
+    phaseInfo: getPhaseInfo(phase),
+    todayAnti: anti,
+    todayPro: pro,
+  }
 }
 
 export async function getScoreHistory(days = 7) {
@@ -389,6 +421,9 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
   let energyLevel = 7
   let calories = 1900
   let triggerFoods = false
+  let antiInflammatoryFoods = 0
+  let proInflammatoryFoods = 0
+  let mealsLogged = 0
   let medsAdherent = true
   let steps = 6000
   let exerciseMins = 0
@@ -422,7 +457,22 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
 
     if (entry.entryType === 'meal') {
       calories += Number(d.calories ?? 0)
+      mealsLogged += 1
       if (d.trigger_foods) triggerFoods = true
+      // Classify the food description for anti-inflammatory diet scoring.
+      const desc = [d.description, d.food, d.name, entry.rawTranscript]
+        .filter(Boolean)
+        .join(' ')
+      if (desc) {
+        const cls = classifyFood(desc)
+        if (cls === 'anti-inflammatory') antiInflammatoryFoods += 1
+        else if (cls === 'pro-inflammatory') proInflammatoryFoods += 1
+      }
+      // Allow explicit classification from structured data
+      if (typeof d.food_class === 'string') {
+        if (d.food_class === 'anti-inflammatory') antiInflammatoryFoods += 1
+        else if (d.food_class === 'pro-inflammatory') proInflammatoryFoods += 1
+      }
     }
 
     if (entry.entryType === 'medication') {
@@ -461,6 +511,9 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
     energyLevel,
     caloriesConsumed: calories,
     triggerFoodsConsumed: triggerFoods,
+    antiInflammatoryFoods,
+    proInflammatoryFoods,
+    mealsLogged,
     medsAdherent,
     stepsWalked: steps,
     exerciseMinutes: exerciseMins,
