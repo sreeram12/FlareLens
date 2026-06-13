@@ -70,11 +70,16 @@ function groupByDay(entries: LogEntry[]) {
 
 export function TimelineView({ entries, scoreHistory, phase, phaseName }: TimelineViewProps) {
   const [filter, setFilter] = useState<FilterType>('all')
+  const [range, setRange] = useState<number>(7)
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? entries : entries.filter((e) => e.entryType === filter)),
-    [entries, filter]
-  )
+  const filtered = useMemo(() => {
+    // Anchor the range on the most recent entry (pure; avoids Date.now in render).
+    const anchor = entries.reduce((m, e) => Math.max(m, new Date(e.loggedAt).getTime()), 0)
+    const cutoff = anchor - range * 86_400_000
+    return entries.filter(
+      (e) => new Date(e.loggedAt).getTime() >= cutoff && (filter === 'all' || e.entryType === filter)
+    )
+  }, [entries, filter, range])
   const grouped = useMemo(() => groupByDay(filtered), [filtered])
   const scoreMap = useMemo(() => {
     const m: Record<string, ScoreDay> = {}
@@ -92,7 +97,25 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
         </p>
       </div>
 
-      {/* Filters */}
+      {/* Range + filters */}
+      <div className="flex items-center gap-1.5">
+        <span className="label-mono mr-1">Range</span>
+        {[7, 14, 30].map((r) => (
+          <button
+            key={r}
+            onClick={() => setRange(r)}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+              range === r
+                ? 'bg-primary/15 border-primary/50 text-primary'
+                : 'bg-card border-border text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {r}d
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 lg:mx-0 lg:px-0 lg:flex-wrap scrollbar-hide">
         {FILTERS.map((opt) => (
           <button
@@ -115,50 +138,56 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
           <p className="text-sm text-muted-foreground">No entries found.</p>
         </div>
       ) : (
-        grouped.map(({ date, entries: dayEntries }) => {
-          const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
-          return (
-            <section key={date.toISOString()} className="flex flex-col gap-2">
-              <div className="flex items-center justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-1">
-                <p className="label-mono">{dayLabel(date)}</p>
-                {scoreDay && <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />}
-              </div>
+        <div className="lg:columns-2 lg:gap-4">
+          {grouped.map(({ date, entries: dayEntries }) => {
+            const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
+            const wearable = dayEntries.find((e) => e.entryType === 'wearable')
+            const events = dayEntries.filter((e) => e.entryType !== 'wearable')
+            return (
+              <section key={date.toISOString()} className="flex flex-col gap-2 break-inside-avoid lg:mb-4">
+                <div className="flex items-center justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-1 lg:static lg:bg-transparent">
+                  <p className="label-mono">{dayLabel(date)}</p>
+                  {scoreDay && <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />}
+                </div>
 
-              <div className="flex flex-col gap-2">
-                {dayEntries.map((entry) => {
-                  const meta = ENTRY_META[entry.entryType] ?? {
-                    label: entry.entryType, icon: Circle, color: 'text-muted-foreground', accent: 'border-l-border',
-                  }
-                  const Icon = meta.icon
-                  return (
-                    <div
-                      key={entry.id}
-                      className={cn('rounded-lg border border-border border-l-2 bg-card p-3', meta.accent)}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <Icon className={cn('h-3.5 w-3.5', meta.color)} strokeWidth={2.4} />
-                          <span className={cn('text-[11px] font-semibold uppercase tracking-wide', meta.color)}>
-                            {meta.label}
-                          </span>
-                          {entry.source !== 'manual' && entry.source !== 'voice' && (
-                            <span className="text-[10px] text-muted-foreground/60 capitalize">
-                              · {entry.source.replace('_', ' ')}
+                {wearable && <RecoveryStrip d={(wearable.data ?? {}) as Data} />}
+
+                <div className="flex flex-col gap-2">
+                  {events.map((entry) => {
+                    const meta = ENTRY_META[entry.entryType] ?? {
+                      label: entry.entryType, icon: Circle, color: 'text-muted-foreground', accent: 'border-l-border',
+                    }
+                    const Icon = meta.icon
+                    return (
+                      <div
+                        key={entry.id}
+                        className={cn('rounded-lg border border-border border-l-2 bg-card p-3', meta.accent)}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Icon className={cn('h-3.5 w-3.5', meta.color)} strokeWidth={2.4} />
+                            <span className={cn('text-[11px] font-semibold uppercase tracking-wide', meta.color)}>
+                              {meta.label}
                             </span>
-                          )}
+                            {entry.source !== 'manual' && entry.source !== 'voice' && (
+                              <span className="text-[10px] text-muted-foreground/60 capitalize">
+                                · {entry.source.replace('_', ' ')}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-muted-foreground tabular-nums">
+                            {format(new Date(entry.loggedAt), 'h:mm a')}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-muted-foreground tabular-nums">
-                          {format(new Date(entry.loggedAt), 'h:mm a')}
-                        </span>
+                        <EntryBody entry={entry} phase={phase} />
                       </div>
-                      <EntryBody entry={entry} phase={phase} />
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )
-        })
+                    )
+                  })}
+                </div>
+              </section>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -354,6 +383,24 @@ function sevTone(v: number): string {
   if (v >= 4) return 'bg-orange-500/10 text-orange-400'
   if (v >= 1) return 'bg-yellow-500/10 text-yellow-400'
   return 'bg-muted text-muted-foreground'
+}
+
+// Wearable day → one slim ambient line (it's context, not a logged event).
+function RecoveryStrip({ d }: { d: Data }) {
+  const parts = [
+    d.sleep_hours != null ? `Sleep ${d.sleep_hours}h` : null,
+    d.resting_hr != null ? `RHR ${d.resting_hr}` : null,
+    d.hrv != null ? `HRV ${d.hrv}` : null,
+    d.respiratory_rate != null ? `Resp ${d.respiratory_rate}` : null,
+    d.steps != null ? `${Number(d.steps).toLocaleString()} steps` : null,
+  ].filter(Boolean)
+  if (parts.length === 0) return null
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+      <HeartPulse className="h-3 w-3 shrink-0 text-cyan-400" />
+      <span className="truncate">{parts.join('  ·  ')}</span>
+    </div>
+  )
 }
 
 function ScorePill({ score }: { score: number; isFlareDay: boolean }) {
