@@ -1,10 +1,12 @@
-import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory, getBaselines } from '@/lib/actions'
+import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory } from '@/lib/actions'
 import { StabilityScoreCard } from '@/components/dashboard/stability-score-card'
 import { DomainCards } from '@/components/dashboard/domain-cards'
 import { ScoreReasons } from '@/components/dashboard/score-reasons'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { TodayHeader } from '@/components/dashboard/today-header'
 import { TodayLogSummary } from '@/components/dashboard/today-log-summary'
+
+export const dynamic = 'force-dynamic'
 
 export default async function TodayPage() {
   const [scoreData, recentEntries, meds, scoreHistory] = await Promise.all([

@@ -1,6 +1,8 @@
 import { getRecentLogEntries, getScoreHistory, getMedications } from '@/lib/actions'
 import { DoctorReport } from '@/components/report/doctor-report'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ReportPage() {
   const [entries, scoreHistory, meds] = await Promise.all([
     getRecentLogEntries(100),

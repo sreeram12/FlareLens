@@ -1,6 +1,8 @@
 import { getRecentLogEntries, getScoreHistory } from '@/lib/actions'
 import { TimelineView } from '@/components/timeline/timeline-view'
 
+export const dynamic = 'force-dynamic'
+
 export default async function TimelinePage() {
   const [entries, scoreHistory] = await Promise.all([
     getRecentLogEntries(100),
