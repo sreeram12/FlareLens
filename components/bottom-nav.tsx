@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation'
 import { Activity, Mic, ListOrdered, FileText, Upload } from 'lucide-react'
 
 const navItems = [
-  { href: '/', label: 'Today', icon: Activity },
-  { href: '/log', label: 'Log', icon: Mic },
+  { href: '/', label: 'Talk', icon: Mic },
+  { href: '/today', label: 'Today', icon: Activity },
   { href: '/timeline', label: 'Timeline', icon: ListOrdered },
   { href: '/imports', label: 'Import', icon: Upload },
   { href: '/report', label: 'Report', icon: FileText },
