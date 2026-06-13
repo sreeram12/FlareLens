@@ -23,8 +23,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} bg-background`}>
-      <body className="bg-background text-foreground antialiased min-h-screen font-sans">
+    // suppressHydrationWarning: browser extensions (password managers, Grammarly,
+    // Dark Reader, etc.) mutate <html>/<body> attributes before React hydrates.
+    // This only suppresses attribute diffs on these elements, not their children.
+    <html lang="en" className={`${inter.variable} bg-background`} suppressHydrationWarning>
+      <body
+        className="bg-background text-foreground antialiased min-h-screen font-sans"
+        suppressHydrationWarning
+      >
         <main className="pb-20 max-w-md mx-auto min-h-screen">
           {children}
         </main>
