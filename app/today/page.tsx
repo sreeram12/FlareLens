@@ -43,7 +43,7 @@ export default async function TodayPage() {
         <ScoreReasons reasons={scoreReasons} score={totalScore} />
       )}
 
-      <DomainCards domainScores={domainScores} />
+      <DomainCards domainScores={domainScores} entries={todayEntries} reasons={scoreReasons} />
 
       <TodayLogSummary entries={todayEntries} medications={meds} />
 
