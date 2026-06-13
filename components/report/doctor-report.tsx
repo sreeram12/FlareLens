@@ -111,7 +111,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">GI Summary Report</p>
+            <p className="label-mono">GI Summary Report</p>
             <h2 className="text-lg font-bold text-foreground mt-1 text-balance">Alex — Crohn&apos;s Disease</h2>
             <p className="text-xs text-muted-foreground mt-1">
               {periodStart} – {today} ({period}-day period)
@@ -131,7 +131,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
 
       {/* Trend */}
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Score Trend</p>
+        <p className="label-mono mb-3">Score Trend</p>
         <div className="flex items-center gap-2 mb-3">
           {trend === 'worsening' && <TrendingUp className="h-4 w-4 text-red-400" />}
           {trend === 'improving' && <TrendingDown className="h-4 w-4 text-emerald-400" />}
@@ -161,7 +161,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
 
       {/* Key stats */}
       <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Key Statistics</p>
+        <p className="label-mono">Key Statistics</p>
         <StatRow label="Avg pain score" value={avgPain > 0 ? `${avgPain.toFixed(1)}/10` : '—'} />
         <StatRow label="Max pain score" value={maxPain > 0 ? `${maxPain}/10` : '—'} highlight={maxPain >= 7} />
         <StatRow label="Blood in stool" value={bloodDays > 0 ? `${bloodDays} day${bloodDays > 1 ? 's' : ''}` : 'None reported'} highlight={bloodDays > 0} />
@@ -173,7 +173,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Salad className="h-4 w-4 text-emerald-400" />
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nutrition · Anti-Inflammatory Diet</p>
+          <p className="label-mono">Nutrition · Anti-Inflammatory Diet</p>
         </div>
         {nutrition.daysWithNutritionData === 0 ? (
           <p className="text-sm text-muted-foreground leading-relaxed">
@@ -228,7 +228,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Pill className="h-4 w-4 text-muted-foreground" />
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Medications</p>
+          <p className="label-mono">Current Medications</p>
         </div>
         <div className="flex flex-col gap-2">
           {medications.map(med => (
@@ -245,7 +245,7 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
 
       {/* Questions to ask */}
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Suggested Questions for GI</p>
+        <p className="label-mono mb-3">Suggested Questions for GI</p>
         <ul className="flex flex-col gap-2">
           {redFlags.includes('Blood in stool') && (
             <li className="text-sm text-foreground">Should we consider a colonoscopy given recent bleeding?</li>
