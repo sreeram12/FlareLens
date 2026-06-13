@@ -8,6 +8,9 @@ import {
   getMedications,
   getScoreHistory,
   computeAndSaveTodayScore,
+  getDietGuidance,
+  getFlareFingerprint,
+  getFindings,
 } from '@/lib/actions'
 
 type EntryType =
@@ -83,4 +86,42 @@ export async function voiceGetTrend(args: { days?: number | null }) {
     score: Number(h.totalScore),
     isFlareDay: h.isFlareDayBoolean,
   }))
+}
+
+export async function voiceGetDietGuidance() {
+  const { phase, phaseInfo, todayAnti, todayPro } = await getDietGuidance()
+  return {
+    phase,
+    phaseName: phaseInfo.name,
+    appliesWhen: phaseInfo.appliesWhen,
+    texture: phaseInfo.texture,
+    emphasize: phaseInfo.emphasize,
+    easeOff: phaseInfo.easeOff,
+    exampleMeals: phaseInfo.exampleMeals,
+    antiInflammatoryFoodsToday: todayAnti,
+    proInflammatoryFoodsToday: todayPro,
+  }
+}
+
+export async function voiceGetFlareFingerprint() {
+  const fp = await getFlareFingerprint()
+  return {
+    matchLevel: fp.today.matchLevel,
+    narrative: fp.today.narrative,
+    bowelIsMainSignal: fp.today.bowelIsMainSignal,
+    activeSignals: fp.today.activeSignals.map((s) => ({
+      signal: s.label,
+      value: s.value,
+      baseline: s.baseline,
+      deviation: s.deviation,
+    })),
+    fingerprintLearning: fp.fingerprint.learning,
+    fingerprintSummary: fp.fingerprint.summary,
+    fingerprintSignals: fp.fingerprint.signals.map((s) => s.label),
+  }
+}
+
+export async function voiceGetSignals() {
+  const items = await getFindings()
+  return items.map((f) => ({ type: f.type, severity: f.severity, title: f.title, detail: f.detail }))
 }

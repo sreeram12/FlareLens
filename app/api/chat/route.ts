@@ -9,11 +9,21 @@ import {
   getMedications,
   getScoreHistory,
   computeAndSaveTodayScore,
+  getDietGuidance,
+  getFlareFingerprint,
+  getFindings,
 } from '@/lib/actions'
+import { AID_AI_GUIDANCE, FOOD_CLASSES } from '@/lib/ibd-aid'
+import { MEAL_TYPES, PORTIONS, INTENSITIES } from '@/lib/health/log-schema'
+import { FLARE_AI_GUIDANCE } from '@/lib/flare-fingerprint'
+import { ANALYST_AI_GUIDANCE } from '@/lib/findings'
 
 const xai = createXai({ apiKey: process.env.AI_GATEWAY_API_KEY })
 
 export const maxDuration = 30
+
+/** zod enum from a readonly string list (loses literal typing — fine for tool I/O). */
+const zEnum = (vals: readonly string[]) => z.enum(vals as unknown as [string, ...string[]])
 
 const SYSTEM_PROMPT = `You are FlareLens, a warm, attentive AI health companion for someone managing Crohn's disease. Voice is the primary way the user talks to you, so keep replies natural, concise, and easy to listen to — usually 1-3 short sentences. Avoid markdown tables, bullet lists, and long paragraphs since responses may be read aloud.
 
@@ -22,7 +32,13 @@ Your job:
 - ANSWER questions about their health using the data tools (getTodayStatus, getRecentActivity, getTrend). Be specific and reference real numbers.
 - ENCOURAGE and reassure. You are supportive but never give definitive medical diagnoses. If something sounds serious (e.g. heavy blood, severe pain, high fever), gently suggest contacting their doctor.
 
-When logging, infer the single most relevant entryType and fill the structured data fields you can. Don't ask for fields the user didn't mention — make reasonable inferences and note assumptions briefly. If the user reports multiple things in one message, call logHealthEntry multiple times.
+When logging, infer the single most relevant entryType and fill the structured data fields you can. Don't ask for fields the user didn't mention — make reasonable inferences and note assumptions briefly. If the user reports multiple things in one message, call logHealthEntry multiple times. For meals, always set food_class (anti-inflammatory / neutral / pro-inflammatory) and any fitting IBD tags. For exercise, capture intensity and post-workout fatigue when mentioned.
+
+${AID_AI_GUIDANCE}
+
+${FLARE_AI_GUIDANCE}
+
+${ANALYST_AI_GUIDANCE}
 
 Today's date is ${new Date().toISOString().split('T')[0]}.`
 
@@ -38,16 +54,25 @@ const entryDataSchema = z
     bloating: z.number().nullable().describe('Bloating 0-10'),
     nausea: z.number().nullable().describe('Nausea 0-10'),
     notes: z.string().nullable().describe('Free-text notes'),
+    // Meal (anti-inflammatory diet aware)
     description: z.string().nullable().describe('Meal description'),
-    calories: z.number().nullable().describe('Estimated calories'),
-    trigger_foods: z.boolean().nullable().describe('Whether trigger foods were eaten'),
+    meal_type: zEnum(MEAL_TYPES).nullable().describe('breakfast | lunch | dinner | snack'),
+    portion: zEnum(PORTIONS).nullable().describe('small | medium | large'),
+    food_class: zEnum(FOOD_CLASSES).nullable().describe('IBD-AID class: anti-inflammatory | neutral | pro-inflammatory'),
+    tags: z.array(z.string()).nullable().describe('IBD food tags (e.g. dairy, fried, fermented, high_fat)'),
+    calories: z.number().nullable().describe('Estimated calories — only if clearly stated'),
     med_name: z.string().nullable().describe('Medication name'),
     dose: z.string().nullable().describe('Medication dose'),
     taken: z.boolean().nullable().describe('Whether the medication was taken'),
     duration_hours: z.number().nullable().describe('Sleep duration in hours'),
     quality: z.number().nullable().describe('Sleep quality 1-10'),
-    type: z.string().nullable().describe('Exercise type'),
+    // Exercise
+    type: z.string().nullable().describe('Exercise type (walk, run, strength, etc.)'),
+    focus: z.string().nullable().describe('Exercise focus (e.g. lower body, cardio)'),
     duration_minutes: z.number().nullable().describe('Exercise duration in minutes'),
+    intensity: zEnum(INTENSITIES).nullable().describe('easy | moderate | hard'),
+    rpe: z.number().nullable().describe('Rate of perceived exertion 0-10'),
+    post_workout_fatigue: z.number().nullable().describe('Fatigue after exercise 0-10'),
     steps: z.number().nullable().describe('Steps walked'),
   })
   .describe('Structured fields for the entry. Only fill what is relevant; use null for the rest.')
@@ -152,6 +177,59 @@ export async function POST(req: Request) {
             score: Number(h.totalScore),
             isFlareDay: h.isFlareDayBoolean,
           }))
+        },
+      }),
+
+      getDietGuidance: tool({
+        description:
+          "Get the user's current anti-inflammatory diet (IBD-AID) phase and today's food tally. Call this BEFORE giving any food or diet advice so suggestions match their current phase.",
+        inputSchema: z.object({}),
+        execute: async () => {
+          const { phase, phaseInfo, todayAnti, todayPro } = await getDietGuidance()
+          return {
+            phase,
+            phaseName: phaseInfo.name,
+            appliesWhen: phaseInfo.appliesWhen,
+            texture: phaseInfo.texture,
+            emphasize: phaseInfo.emphasize,
+            easeOff: phaseInfo.easeOff,
+            exampleMeals: phaseInfo.exampleMeals,
+            antiInflammatoryFoodsToday: todayAnti,
+            proInflammatoryFoodsToday: todayPro,
+          }
+        },
+      }),
+
+      getFlareFingerprint: tool({
+        description:
+          "Compare today against the patient's learned flare fingerprint and list which signals are outside their personal baseline. Call this FIRST for 'why do I feel worse', 'what changed', or 'am I flaring' questions.",
+        inputSchema: z.object({}),
+        execute: async () => {
+          const fp = await getFlareFingerprint()
+          return {
+            matchLevel: fp.today.matchLevel,
+            narrative: fp.today.narrative,
+            bowelIsMainSignal: fp.today.bowelIsMainSignal,
+            activeSignals: fp.today.activeSignals.map((s) => ({
+              signal: s.label,
+              value: s.value,
+              baseline: s.baseline,
+              deviation: s.deviation,
+            })),
+            fingerprintLearning: fp.fingerprint.learning,
+            fingerprintSummary: fp.fingerprint.summary,
+            fingerprintSignals: fp.fingerprint.signals.map((s) => s.label),
+          }
+        },
+      }),
+
+      getSignals: tool({
+        description:
+          "Get the background analyst's current findings (flare-fingerprint matches, nutrient gaps, lab shifts, missed meds) for this patient, ranked by severity. Call at the start of a conversation to proactively surface anything important.",
+        inputSchema: z.object({}),
+        execute: async () => {
+          const items = await getFindings()
+          return items.map((f) => ({ type: f.type, severity: f.severity, title: f.title, detail: f.detail }))
         },
       }),
     },

@@ -6,7 +6,13 @@ import {
   voiceGetTodayStatus,
   voiceGetRecentActivity,
   voiceGetTrend,
+  voiceGetDietGuidance,
+  voiceGetFlareFingerprint,
+  voiceGetSignals,
 } from '@/lib/voice-tools'
+import { AID_AI_GUIDANCE } from '@/lib/ibd-aid'
+import { FLARE_AI_GUIDANCE } from '@/lib/flare-fingerprint'
+import { ANALYST_AI_GUIDANCE } from '@/lib/findings'
 
 export type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error'
 
@@ -27,7 +33,13 @@ Your job:
 - ANSWER questions about their health using get_today_status, get_recent_activity, and get_trend. Be specific and reference real numbers.
 - ENCOURAGE and reassure. You are supportive but never give definitive medical diagnoses. If something sounds serious (e.g. heavy blood, severe pain, high fever), gently suggest contacting their doctor.
 
-When logging, infer the single most relevant entryType and fill the structured data fields you can. Don't ask for fields the user didn't mention. If the user reports multiple things at once, call log_health_entry multiple times.
+When logging, infer the single most relevant entryType and fill the structured data fields you can. Don't ask for fields the user didn't mention. If the user reports multiple things at once, call log_health_entry multiple times. For meals, set food_class (anti-inflammatory / neutral / pro-inflammatory) and any fitting IBD tags; for exercise, capture intensity and post-workout fatigue when mentioned.
+
+${AID_AI_GUIDANCE}
+
+${FLARE_AI_GUIDANCE}
+
+${ANALYST_AI_GUIDANCE}
 
 Today's date is ${new Date().toISOString().split('T')[0]}.`
 
@@ -47,7 +59,15 @@ const TOOLS = [
         summary: { type: 'string', description: 'Short plain-English summary of what was logged' },
         data: {
           type: 'object',
-          description: 'Structured fields relevant to the entry (count, consistency, blood, urgency, pain_scale, fatigue, bloating, nausea, description, calories, med_name, dose, taken, duration_hours, quality, type, duration_minutes, steps, notes). Only include what is relevant.',
+          description:
+            'Structured fields relevant to the entry. ' +
+            'bowel_movement: count, consistency, blood, urgency, pain_before. ' +
+            'symptom: pain_scale, fatigue, bloating, nausea, notes. ' +
+            'meal: description, meal_type (breakfast|lunch|dinner|snack), portion (small|medium|large), food_class (anti-inflammatory|neutral|pro-inflammatory), tags (IBD tags like dairy, fried, fermented), calories (only if stated). ' +
+            'medication: med_name, dose, taken. ' +
+            'sleep: duration_hours, quality. ' +
+            'exercise: type, focus, duration_minutes, intensity (easy|moderate|hard), rpe, post_workout_fatigue, steps. ' +
+            'Only include what is relevant.',
         },
         rawTranscript: { type: 'string', description: 'The original user phrasing' },
       },
@@ -77,6 +97,27 @@ const TOOLS = [
       type: 'object',
       properties: { days: { type: 'number', description: 'Number of days (default 7)' } },
     },
+  },
+  {
+    type: 'function',
+    name: 'get_diet_guidance',
+    description:
+      "Get the user's current anti-inflammatory diet (IBD-AID) phase and today's food tally. Call before giving food or diet advice so suggestions match their phase.",
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    type: 'function',
+    name: 'get_flare_fingerprint',
+    description:
+      "Compare today against the patient's learned flare fingerprint and list which signals are outside their personal baseline. Call FIRST for 'why do I feel worse', 'what changed', or 'am I flaring'.",
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    type: 'function',
+    name: 'get_signals',
+    description:
+      "Get the background analyst's current findings, ranked by severity. Call at the start of a conversation to proactively surface anything important.",
+    parameters: { type: 'object', properties: {} },
   },
 ]
 
@@ -200,6 +241,15 @@ export function useVoiceAgent() {
             break
           case 'get_trend':
             result = await voiceGetTrend(args as never)
+            break
+          case 'get_diet_guidance':
+            result = await voiceGetDietGuidance()
+            break
+          case 'get_flare_fingerprint':
+            result = await voiceGetFlareFingerprint()
+            break
+          case 'get_signals':
+            result = await voiceGetSignals()
             break
           default:
             result = { error: `Unknown function ${name}` }

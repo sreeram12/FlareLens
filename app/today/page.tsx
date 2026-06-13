@@ -1,19 +1,23 @@
-import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory } from '@/lib/actions'
+import { getTodayScore, getRecentLogEntries, getMedications, getScoreHistory, runAnalysis } from '@/lib/actions'
 import { StabilityScoreCard } from '@/components/dashboard/stability-score-card'
+import { SignalsFeed } from '@/components/dashboard/signals-feed'
 import { DomainCards } from '@/components/dashboard/domain-cards'
 import { ScoreReasons } from '@/components/dashboard/score-reasons'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { TodayHeader } from '@/components/dashboard/today-header'
 import { TodayLogSummary } from '@/components/dashboard/today-log-summary'
+import { AidPhaseCard } from '@/components/dashboard/aid-phase-card'
+import { FlareFingerprintCard } from '@/components/dashboard/flare-fingerprint-card'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TodayPage() {
-  const [scoreData, recentEntries, meds, scoreHistory] = await Promise.all([
+  const [scoreData, recentEntries, meds, scoreHistory, signals] = await Promise.all([
     getTodayScore(),
     getRecentLogEntries(20),
     getMedications(),
     getScoreHistory(7),
+    runAnalysis(), // background analyst: refresh findings on open
   ])
 
   const todayStr = new Date().toISOString().split('T')[0]
@@ -30,6 +34,16 @@ export default async function TodayPage() {
     <div className="flex flex-col gap-4 px-4 pt-6 pb-4">
       <TodayHeader patientName="Alex" />
 
+      <SignalsFeed
+        findings={signals.map((f) => ({
+          id: f.id,
+          type: f.type,
+          severity: f.severity,
+          title: f.title,
+          detail: f.detail,
+        }))}
+      />
+
       <StabilityScoreCard
         score={totalScore}
         scoreHistory={scoreHistory.map(s => ({
@@ -43,7 +57,11 @@ export default async function TodayPage() {
         <ScoreReasons reasons={scoreReasons} score={totalScore} />
       )}
 
+      <FlareFingerprintCard />
+
       <DomainCards domainScores={domainScores} entries={todayEntries} reasons={scoreReasons} />
+
+      <AidPhaseCard />
 
       <TodayLogSummary entries={todayEntries} medications={meds} />
 
