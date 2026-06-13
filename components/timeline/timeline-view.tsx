@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { format, isToday, isYesterday, parseISO, isSameDay } from 'date-fns'
 import type { LogEntry } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
-import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle } from 'lucide-react'
+import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle, Scale } from 'lucide-react'
 import { getScoreLabel } from '@/lib/stability-score'
 
 const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color: string; dot: string }> = {
@@ -14,6 +14,7 @@ const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color
   medication:     { label: 'Med',      icon: Pill,      color: 'text-purple-400',  dot: 'bg-purple-400' },
   sleep:          { label: 'Sleep',    icon: Moon,      color: 'text-indigo-400',  dot: 'bg-indigo-400' },
   exercise:       { label: 'Exercise', icon: Dumbbell,  color: 'text-emerald-400', dot: 'bg-emerald-400' },
+  weight:         { label: 'Weight',   icon: Scale,     color: 'text-amber-400',   dot: 'bg-amber-400' },
 }
 
 interface ScoreDay {
@@ -27,7 +28,7 @@ interface TimelineViewProps {
   scoreHistory: ScoreDay[]
 }
 
-type FilterType = 'all' | 'bowel_movement' | 'symptom' | 'meal' | 'medication' | 'sleep' | 'exercise'
+type FilterType = 'all' | 'bowel_movement' | 'symptom' | 'meal' | 'medication' | 'sleep' | 'exercise' | 'weight'
 
 function entryOneLiner(entry: LogEntry): string {
   const d = entry.data as Record<string, unknown>
@@ -36,14 +37,22 @@ function entryOneLiner(entry: LogEntry): string {
       return `${d.count ?? '?'} BM · Urgency ${d.urgency ?? '?'}/10${d.blood ? ' · Blood' : ''}`
     case 'symptom':
       return `Pain ${d.pain_scale ?? '?'} · Fatigue ${d.fatigue ?? '?'}${d.notes ? ` · "${String(d.notes).slice(0, 40)}"` : ''}`
-    case 'meal':
-      return `${d.description ?? 'Meal'} · ${d.calories ?? '?'} kcal${d.trigger_foods ? ' · Trigger' : ''}`
+    case 'meal': {
+      const macros = [
+        d.protein_g !== undefined ? `P${d.protein_g}` : null,
+        d.carbs_g !== undefined ? `C${d.carbs_g}` : null,
+        d.fat_g !== undefined ? `F${d.fat_g}` : null,
+      ].filter(Boolean).join(' / ')
+      return `${d.description ?? 'Meal'} · ${d.calories ?? '?'} kcal${macros ? ` · ${macros}` : ''}${d.trigger_foods ? ' · Trigger' : ''}`
+    }
     case 'medication':
       return `${d.med_name ?? 'Med'} ${d.taken === false ? '(missed)' : '(taken)'}`
     case 'sleep':
       return `${d.duration_hours ?? '?'}h · Quality ${d.quality ?? '?'}/10`
     case 'exercise':
       return `${d.type ?? 'Exercise'} ${d.duration_minutes ?? '?'} min · ${Number(d.steps ?? 0).toLocaleString()} steps`
+    case 'weight':
+      return `${d.weight_kg ?? '?'} kg${d.is_trend ? ' (trend)' : ''}${d.steps !== undefined ? ` · ${Number(d.steps).toLocaleString()} steps` : ''}`
     default:
       return JSON.stringify(d).slice(0, 60)
   }
@@ -93,6 +102,7 @@ export function TimelineView({ entries, scoreHistory }: TimelineViewProps) {
     { value: 'medication', label: 'Meds' },
     { value: 'sleep', label: 'Sleep' },
     { value: 'exercise', label: 'Exercise' },
+    { value: 'weight', label: 'Weight' },
   ]
 
   return (

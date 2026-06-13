@@ -211,6 +211,106 @@ export async function completeFlareSession(
   revalidatePath('/')
 }
 
+// ─── MacroFactor Import ───────────────────────────────────────────────────────
+
+import { normalizeWeight, type ParsedDay } from '@/lib/macrofactor-parser'
+
+export async function saveMacroFactorImport(days: ParsedDay[]) {
+  let mealsInserted = 0
+  let weightsInserted = 0
+  let skipped = 0
+
+  for (const day of days) {
+    // Build a noon timestamp for the day so it lands on the right calendar date
+    const loggedAt = new Date(`${day.date}T12:00:00`)
+
+    // ── Nutrition → meal entry ──
+    if (day.calories !== undefined) {
+      const existing = await db
+        .select({ id: logEntries.id })
+        .from(logEntries)
+        .where(
+          and(
+            eq(logEntries.patientId, PATIENT_ID),
+            eq(logEntries.entryType, 'meal'),
+            eq(logEntries.source, 'macrofactor'),
+            sql`(${logEntries.data} ->> 'date') = ${day.date}`
+          )
+        )
+        .limit(1)
+
+      const mealData = {
+        date: day.date,
+        description: 'Daily nutrition (MacroFactor)',
+        calories: Math.round(day.calories),
+        protein_g: day.protein !== undefined ? Math.round(day.protein) : undefined,
+        carbs_g: day.carbs !== undefined ? Math.round(day.carbs) : undefined,
+        fat_g: day.fat !== undefined ? Math.round(day.fat) : undefined,
+        fiber_g: day.fiber !== undefined ? Math.round(day.fiber) : undefined,
+        expenditure: day.expenditure !== undefined ? Math.round(day.expenditure) : undefined,
+        trigger_foods: false,
+      }
+
+      if (existing.length > 0) {
+        await db.update(logEntries).set({ data: mealData, loggedAt }).where(eq(logEntries.id, existing[0].id))
+        skipped++
+      } else {
+        await db.insert(logEntries).values({
+          patientId: PATIENT_ID,
+          entryType: 'meal',
+          source: 'macrofactor',
+          data: mealData,
+          loggedAt,
+        })
+        mealsInserted++
+      }
+    }
+
+    // ── Weight → weight entry ──
+    const weight = day.trendWeightKg ?? day.weightKg
+    if (weight !== undefined) {
+      const existing = await db
+        .select({ id: logEntries.id })
+        .from(logEntries)
+        .where(
+          and(
+            eq(logEntries.patientId, PATIENT_ID),
+            eq(logEntries.entryType, 'weight'),
+            eq(logEntries.source, 'macrofactor'),
+            sql`(${logEntries.data} ->> 'date') = ${day.date}`
+          )
+        )
+        .limit(1)
+
+      const weightData = {
+        date: day.date,
+        weight_kg: normalizeWeight(weight),
+        is_trend: day.trendWeightKg !== undefined,
+        steps: day.steps !== undefined ? Math.round(day.steps) : undefined,
+      }
+
+      if (existing.length > 0) {
+        await db.update(logEntries).set({ data: weightData, loggedAt }).where(eq(logEntries.id, existing[0].id))
+      } else {
+        await db.insert(logEntries).values({
+          patientId: PATIENT_ID,
+          entryType: 'weight',
+          source: 'macrofactor',
+          data: weightData,
+          loggedAt,
+        })
+        weightsInserted++
+      }
+    }
+  }
+
+  revalidatePath('/')
+  revalidatePath('/timeline')
+  revalidatePath('/imports')
+
+  return { mealsInserted, weightsInserted, updated: skipped, totalDays: days.length }
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEntriesForDate>>): DayData {
