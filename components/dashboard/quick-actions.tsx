@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { Mic, AlertTriangle, FileText, Upload } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 interface QuickActionsProps {
   currentScore: number

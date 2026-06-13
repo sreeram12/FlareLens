@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { format, isToday, isYesterday, parseISO, isSameDay } from 'date-fns'
+import { format, isToday, isYesterday, isSameDay } from 'date-fns'
 import type { LogEntry } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle, Scale } from 'lucide-react'
@@ -200,7 +200,7 @@ export function TimelineView({ entries, scoreHistory }: TimelineViewProps) {
   )
 }
 
-function ScorePill({ score, isFlareDay }: { score: number; isFlareDay: boolean }) {
+function ScorePill({ score }: { score: number; isFlareDay: boolean }) {
   const { label, color, bgColor } = getScoreLabel(score)
   return (
     <div className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold', bgColor, color)}>

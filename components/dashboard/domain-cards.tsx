@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { getDomainLabel, type DomainScores } from '@/lib/stability-score'
 import { cn } from '@/lib/utils'
-import { Zap, Moon, Utensils, Pill, Dumbbell, FlaskConical, Thermometer, Activity, ChevronRight } from 'lucide-react'
+import { Zap, Utensils, Pill, Dumbbell, FlaskConical, Thermometer, Activity, ChevronRight } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
