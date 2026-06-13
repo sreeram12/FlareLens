@@ -51,8 +51,13 @@ function entryOneLiner(entry: LogEntry): string {
       return `${d.duration_hours ?? '?'}h · Quality ${d.quality ?? '?'}/10`
     case 'exercise':
       return `${d.type ?? 'Exercise'} ${d.duration_minutes ?? '?'} min · ${Number(d.steps ?? 0).toLocaleString()} steps`
-    case 'weight':
-      return `${d.weight_kg ?? '?'} kg${d.is_trend ? ' (trend)' : ''}${d.steps !== undefined ? ` · ${Number(d.steps).toLocaleString()} steps` : ''}`
+    case 'weight': {
+      const parts: string[] = []
+      if (d.weight_kg !== undefined && d.weight_kg !== null) parts.push(`${d.weight_kg} kg${d.is_trend ? ' (trend)' : ''}`)
+      if (d.fat_percent !== undefined && d.fat_percent !== null) parts.push(`${d.fat_percent}% fat`)
+      if (d.steps !== undefined && d.steps !== null) parts.push(`${Number(d.steps).toLocaleString()} steps`)
+      return parts.join(' · ') || 'Body metrics'
+    }
     default:
       return JSON.stringify(d).slice(0, 60)
   }

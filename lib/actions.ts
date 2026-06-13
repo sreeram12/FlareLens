@@ -247,6 +247,10 @@ export async function saveMacroFactorImport(days: ParsedDay[]) {
         carbs_g: day.carbs !== undefined ? Math.round(day.carbs) : undefined,
         fat_g: day.fat !== undefined ? Math.round(day.fat) : undefined,
         fiber_g: day.fiber !== undefined ? Math.round(day.fiber) : undefined,
+        water_ml: day.water !== undefined ? Math.round(day.water) : undefined,
+        caffeine_mg: day.caffeine !== undefined ? Math.round(day.caffeine) : undefined,
+        sodium_mg: day.sodium !== undefined ? Math.round(day.sodium) : undefined,
+        sugars_g: day.sugars !== undefined ? Math.round(day.sugars) : undefined,
         expenditure: day.expenditure !== undefined ? Math.round(day.expenditure) : undefined,
         trigger_foods: false,
       }
@@ -266,9 +270,9 @@ export async function saveMacroFactorImport(days: ParsedDay[]) {
       }
     }
 
-    // ── Weight → weight entry ──
+    // ── Weight / activity → weight entry (also captures steps-only days) ──
     const weight = day.trendWeightKg ?? day.weightKg
-    if (weight !== undefined) {
+    if (weight !== undefined || day.steps !== undefined || day.fatPercent !== undefined) {
       const existing = await db
         .select({ id: logEntries.id })
         .from(logEntries)
@@ -284,8 +288,9 @@ export async function saveMacroFactorImport(days: ParsedDay[]) {
 
       const weightData = {
         date: day.date,
-        weight_kg: normalizeWeight(weight),
+        weight_kg: weight !== undefined ? normalizeWeight(weight) : undefined,
         is_trend: day.trendWeightKg !== undefined,
+        fat_percent: day.fatPercent,
         steps: day.steps !== undefined ? Math.round(day.steps) : undefined,
       }
 

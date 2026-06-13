@@ -53,7 +53,7 @@ export function MacroFactorImporter({ alreadyImported }: ImporterProps) {
       setParsed(json as ParseResponse)
       setStatus('preview')
     } catch {
-      setError('Could not read the file. Make sure it is a valid .xlsx export.')
+      setError('Could not read the file. Make sure it is a valid MacroFactor .csv or .xlsx export.')
       setStatus('error')
     }
   }
@@ -87,6 +87,7 @@ export function MacroFactorImporter({ alreadyImported }: ImporterProps) {
         days: parsed.days.length,
         withCalories: parsed.days.filter((d) => d.calories !== undefined).length,
         withWeight: parsed.days.filter((d) => d.weightKg !== undefined || d.trendWeightKg !== undefined).length,
+        withSteps: parsed.days.filter((d) => d.steps !== undefined).length,
         dateRange:
           parsed.days.length > 0
             ? `${parsed.days[0].date} → ${parsed.days[parsed.days.length - 1].date}`
@@ -134,14 +135,14 @@ export function MacroFactorImporter({ alreadyImported }: ImporterProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">Drop your MacroFactor export here</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">or tap to browse · .xlsx / .xls</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">or tap to browse · .csv / .xlsx</p>
                 </div>
               </>
             )}
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0]
@@ -164,9 +165,12 @@ export function MacroFactorImporter({ alreadyImported }: ImporterProps) {
             <p className="text-xs font-medium text-foreground mb-1.5">How to export from MacroFactor</p>
             <ol className="text-xs text-muted-foreground leading-relaxed list-decimal list-inside space-y-0.5">
               <li>Open MacroFactor → Settings → Export Data</li>
-              <li>Choose the Excel (.xlsx) format and the full date range</li>
-              <li>Upload the downloaded file here</li>
+              <li>Tap &quot;Export All&quot; to download the full history</li>
+              <li>Upload the .csv (or .xlsx) file here</li>
             </ol>
+            <p className="text-xs text-muted-foreground/70 mt-2 leading-relaxed">
+              Captures calories, macros, fiber, water, caffeine, sodium, sugars, body weight, body-fat %, expenditure, and steps.
+            </p>
           </div>
         </>
       )}
