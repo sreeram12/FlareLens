@@ -19,6 +19,9 @@ next-env.d.ts
 # local health-data exports (real PII) — keep out of git
 /data
 
+# UI-review screenshot artifacts
+/.screenshots
+
 # debug logs
 npm-debug.log*
 yarn-debug.log*
