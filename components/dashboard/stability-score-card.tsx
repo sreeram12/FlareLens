@@ -27,9 +27,6 @@ export function StabilityScoreCard({ score, scoreHistory }: StabilityScoreCardPr
   const trendColor = trend === 'up' ? 'text-red-400' : trend === 'down' ? 'text-emerald-400' : 'text-muted-foreground'
   const trendLabel = trend === 'up' ? 'Worsening' : trend === 'down' ? 'Improving' : 'Stable'
 
-  // Mini sparkline bar data (last 7 days)
-  const maxScore = Math.max(...scoreHistory.map(s => s.score), 1)
-
   return (
     <div className="glass-panel glow rounded-2xl p-5">
       <div className="flex items-start justify-between gap-4">
@@ -58,29 +55,44 @@ export function StabilityScoreCard({ score, scoreHistory }: StabilityScoreCardPr
       </div>
 
       {/* 7-day sparkline */}
-      {scoreHistory.length > 0 && (
+      {scoreHistory.length > 1 && (
         <div className="mt-4 pt-3 border-t border-border/50">
-          <p className="text-xs text-muted-foreground mb-2">7-day trend</p>
-          <div className="flex items-end gap-1 h-8">
-            {scoreHistory.slice(-7).map((day, i) => {
-              const pct = maxScore > 0 ? (day.score / maxScore) : 0
-              const barColor = day.isFlareDay ? 'bg-red-400' :
-                day.score >= 40 ? 'bg-orange-400' :
-                day.score >= 20 ? 'bg-yellow-400' : 'bg-emerald-400'
-              const isToday = i === scoreHistory.slice(-7).length - 1
-              return (
-                <div key={day.date} className="flex-1 flex flex-col items-center gap-0.5">
-                  <div
-                    className={cn('w-full rounded-sm transition-all', barColor, isToday ? 'opacity-100' : 'opacity-60')}
-                    style={{ height: `${Math.max(pct * 28, 3)}px` }}
-                  />
-                </div>
-              )
-            })}
-          </div>
+          <p className="label-mono mb-2">7-day trend</p>
+          <Sparkline data={scoreHistory.slice(-7)} />
         </div>
       )}
     </div>
+  )
+}
+
+function Sparkline({ data }: { data: ScoreDay[] }) {
+  const W = 100
+  const H = 28
+  const max = Math.max(...data.map((d) => d.score), 50)
+  const stepX = data.length > 1 ? W / (data.length - 1) : W
+  const pts = data.map((d, i) => [i * stepX, H - (d.score / max) * (H - 4) - 2] as const)
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
+  const area = `${line} L${W} ${H} L0 ${H} Z`
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-8 w-full overflow-visible">
+      {/* flare-day markers (thin vertical ticks, kept crisp) */}
+      {data.map((d, i) =>
+        d.isFlareDay ? (
+          <line key={i} x1={pts[i][0]} y1={0} x2={pts[i][0]} y2={H} stroke="#f87171" strokeOpacity={0.5} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        ) : null
+      )}
+      <path d={area} fill="oklch(var(--glow-color) / 14%)" />
+      <path
+        d={line}
+        fill="none"
+        stroke="oklch(var(--glow-color))"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   )
 }
 

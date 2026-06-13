@@ -31,43 +31,45 @@ export default async function TodayPage() {
   const domainScores = (scoreData?.domainScores ?? {}) as Record<string, number>
   const scoreReasons = (scoreData?.scoreReasons ?? []) as string[]
 
+  const mappedSignals = signals.map((f) => ({
+    id: f.id, type: f.type, severity: f.severity, title: f.title, detail: f.detail,
+  }))
+
   return (
-    <div className="flex flex-col gap-4 px-4 pt-6 pb-4">
+    <div className="mx-auto w-full max-w-md lg:max-w-5xl flex flex-col gap-4 px-4 pt-6 pb-4">
       <AnalysisRefresher />
       <TodayHeader patientName="Alex" />
 
-      <SignalsFeed
-        findings={signals.map((f) => ({
-          id: f.id,
-          type: f.type,
-          severity: f.severity,
-          title: f.title,
-          detail: f.detail,
-        }))}
-      />
+      {/* Primary actions toolbar */}
+      <QuickActions currentScore={totalScore} />
 
-      <StabilityScoreCard
-        score={totalScore}
-        scoreHistory={scoreHistory.map(s => ({
-          date: s.scoreDate as string,
-          score: parseFloat(s.totalScore as string),
-          isFlareDay: s.isFlareDayBoolean ?? false,
-        }))}
-      />
+      {/* Hero: stability (+reasons) | flare fingerprint (+signals) */}
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
+        <div className="flex flex-col gap-4">
+          <StabilityScoreCard
+            score={totalScore}
+            scoreHistory={scoreHistory.map(s => ({
+              date: s.scoreDate as string,
+              score: parseFloat(s.totalScore as string),
+              isFlareDay: s.isFlareDayBoolean ?? false,
+            }))}
+          />
+          {scoreReasons.length > 0 && <ScoreReasons reasons={scoreReasons} score={totalScore} />}
+        </div>
+        <div className="flex flex-col gap-4">
+          <FlareFingerprintCard />
+          <SignalsFeed findings={mappedSignals} />
+        </div>
+      </div>
 
-      {scoreReasons.length > 0 && (
-        <ScoreReasons reasons={scoreReasons} score={totalScore} />
-      )}
-
-      <FlareFingerprintCard />
-
+      {/* Domains span full width (internally a 2-col grid) */}
       <DomainCards domainScores={domainScores} entries={todayEntries} reasons={scoreReasons} />
 
-      <AidPhaseCard />
-
-      <TodayLogSummary entries={todayEntries} medications={meds} />
-
-      <QuickActions currentScore={totalScore} />
+      {/* Reference row */}
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
+        <AidPhaseCard />
+        <TodayLogSummary entries={todayEntries} medications={meds} />
+      </div>
     </div>
   )
 }
