@@ -420,16 +420,14 @@ export const PromptInputActionAddAttachments = ({
 }: PromptInputActionAddAttachmentsProps) => {
   const attachments = usePromptInputAttachments();
 
-  const handleSelect = useCallback(
-    (e: Parameters<NonNullable<ComponentProps<typeof DropdownMenuItem>["onSelect"]>>[0]) => {
-      e.preventDefault();
-      attachments.openFileDialog();
-    },
-    [attachments]
-  );
-
   return (
-    <DropdownMenuItem {...props} onSelect={handleSelect}>
+    <DropdownMenuItem
+      {...props}
+      onSelect={(event) => {
+        event.preventDefault();
+        attachments.openFileDialog();
+      }}
+    >
       <ImageIcon className="mr-2 size-4" /> {label}
     </DropdownMenuItem>
   );
@@ -448,33 +446,31 @@ export const PromptInputActionAddScreenshot = ({
 }: PromptInputActionAddScreenshotProps) => {
   const attachments = usePromptInputAttachments();
 
-  const handleSelect = useCallback(
-    async (event: Parameters<NonNullable<ComponentProps<typeof DropdownMenuItem>["onSelect"]>>[0]) => {
-      onSelect?.(event);
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      try {
-        const screenshot = await captureScreenshot();
-        if (screenshot) {
-          attachments.add([screenshot]);
-        }
-      } catch (error) {
-        if (
-          error instanceof DOMException &&
-          (error.name === "NotAllowedError" || error.name === "AbortError")
-        ) {
+  return (
+    <DropdownMenuItem
+      {...props}
+      onSelect={async (event) => {
+        onSelect?.(event);
+        if (event.defaultPrevented) {
           return;
         }
-        throw error;
-      }
-    },
-    [onSelect, attachments]
-  );
 
-  return (
-    <DropdownMenuItem {...props} onSelect={handleSelect}>
+        try {
+          const screenshot = await captureScreenshot();
+          if (screenshot) {
+            attachments.add([screenshot]);
+          }
+        } catch (error) {
+          if (
+            error instanceof DOMException &&
+            (error.name === "NotAllowedError" || error.name === "AbortError")
+          ) {
+            return;
+          }
+          throw error;
+        }
+      }}
+    >
       <Monitor className="mr-2 size-4" />
       {label}
     </DropdownMenuItem>
