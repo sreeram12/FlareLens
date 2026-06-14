@@ -179,4 +179,24 @@
     font-size: 0.6875rem;
     color: var(--muted-foreground);
   }
+
+  /* Ambient "breathing" glow for the hero voice orb at rest. */
+  .orb-pulse {
+    animation: orbPulse 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes orbPulse {
+  0%, 100% { box-shadow: var(--glow-soft); }
+  50% { box-shadow: var(--glow-strong); }
+}
+
+/* Respect reduced-motion for an often-unwell audience: kill animation + transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

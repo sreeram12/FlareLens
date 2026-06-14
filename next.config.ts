@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Hide the dev-tools badge (it overlaps the brand/active tab during demos).
+  devIndicators: false,
 };
 
 export default nextConfig;
