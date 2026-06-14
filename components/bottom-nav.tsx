@@ -7,8 +7,9 @@ import { cn } from '@/lib/utils'
 
 export function BottomNav() {
   const pathname = usePathname()
-  const activeIndex = NAV_ITEMS.findIndex((i) => i.href === pathname)
-  const n = NAV_ITEMS.length
+  const items = NAV_ITEMS.filter((i) => !i.desktopOnly)
+  const activeIndex = items.findIndex((i) => i.href === pathname)
+  const n = items.length
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-[var(--glass-bg)] backdrop-blur-xl">
@@ -24,7 +25,7 @@ export function BottomNav() {
           </span>
         )}
 
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href
           return (
             <Link
