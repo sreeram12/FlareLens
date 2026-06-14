@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { format, subDays } from 'date-fns'
-import { FileText, AlertTriangle, CheckCircle2, Pill, TrendingUp, TrendingDown, Minus, Salad } from 'lucide-react'
+import { FileText, AlertTriangle, CheckCircle2, Pill, TrendingUp, TrendingDown, Minus, Salad, FlaskConical, ArrowUp, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LogEntry, Medication } from '@/lib/db/schema'
 import { getScoreLabel } from '@/lib/stability-score'
 import { analyzeNutrition } from '@/lib/nutrition-analysis'
+import { concerningLabsLine, type LabSummary } from '@/lib/labs'
 
 interface ScoreDay {
   scoreDate: string | Date
@@ -18,6 +19,7 @@ interface DoctorReportProps {
   entries: LogEntry[]
   scoreHistory: ScoreDay[]
   medications: Medication[]
+  labs: LabSummary[]
 }
 
 function avg(arr: number[]) {
@@ -25,7 +27,7 @@ function avg(arr: number[]) {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
 
-export function DoctorReport({ entries, scoreHistory, medications }: DoctorReportProps) {
+export function DoctorReport({ entries, scoreHistory, medications, labs }: DoctorReportProps) {
   const [period, setPeriod] = useState<7 | 14 | 30>(14)
   const cutoff = useMemo(() => subDays(new Date(), period), [period])
 
@@ -169,6 +171,23 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
         <StatRow label="Trigger food days" value={triggerMeals > 0 ? `${triggerMeals} meals` : 'None'} highlight={triggerMeals > 2} />
       </div>
 
+      {/* Recent labs (from imported records) */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <FlaskConical className="h-4 w-4 text-violet-400" />
+          <p className="label-mono">Recent labs · from records</p>
+        </div>
+        {labs.length === 0 ? (
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Connect or import medical records to see labs (CRP, calprotectin, ferritin, hemoglobin…) with trends.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {labs.map((l) => <LabRow key={l.key} lab={l} />)}
+          </div>
+        )}
+      </div>
+
       {/* Nutrition · Anti-Inflammatory Diet */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -256,6 +275,11 @@ export function DoctorReport({ entries, scoreHistory, medications }: DoctorRepor
           {trend === 'worsening' && (
             <li className="text-sm text-foreground">My trend has been worsening over {period} days — should we adjust treatment?</li>
           )}
+          {labs.some((l) => l.concerning) && (
+            <li className="text-sm text-foreground">
+              My recent labs show {concerningLabsLine(labs)} — should we repeat labs, adjust treatment, or investigate further?
+            </li>
+          )}
           {nutrition.gaps.length > 0 && (
             <li className="text-sm text-foreground">
               My nutrition tracking flags {nutrition.gaps.slice(0, 3).map(g => g.label).join(', ')} — should I supplement or adjust my diet, or check labs?
@@ -280,6 +304,60 @@ function StatBlock({ label, value, sub, highlight }: { label: string; value: str
       <p className={cn('text-lg font-bold tabular-nums', highlight ? 'text-red-400' : 'text-foreground')}>{value}</p>
       <p className="text-xs text-muted-foreground leading-tight">{sub}</p>
     </div>
+  )
+}
+
+function LabRow({ lab }: { lab: LabSummary }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground">{lab.label}</span>
+          {lab.concerning && (
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                lab.status === 'high' ? 'bg-orange-500/10 text-orange-400' : 'bg-yellow-500/10 text-yellow-400'
+              )}
+            >
+              {lab.status}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{lab.note} · {lab.latestDate}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {lab.series.length > 1 && <LabSpark series={lab.series} bad={lab.trendIsBad} />}
+        <span
+          className={cn(
+            'text-sm font-semibold tabular-nums',
+            lab.concerning ? (lab.status === 'high' ? 'text-orange-400' : 'text-yellow-400') : 'text-foreground'
+          )}
+        >
+          {lab.latest}{lab.unit ? ` ${lab.unit}` : ''}
+        </span>
+        {lab.trend === 'up' && <ArrowUp className={cn('h-3.5 w-3.5', lab.trendIsBad ? 'text-orange-400' : 'text-emerald-400')} />}
+        {lab.trend === 'down' && <ArrowDown className={cn('h-3.5 w-3.5', lab.trendIsBad ? 'text-orange-400' : 'text-emerald-400')} />}
+      </div>
+    </div>
+  )
+}
+
+function LabSpark({ series, bad }: { series: { date: string; value: number }[]; bad: boolean }) {
+  const W = 48, H = 18
+  const vals = series.map((p) => p.value)
+  const min = Math.min(...vals)
+  const span = Math.max(...vals) - min || 1
+  const stepX = series.length > 1 ? W / (series.length - 1) : W
+  const pts = series.map((p, i) => [i * stepX, H - ((p.value - min) / span) * (H - 4) - 2] as const)
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
+  const stroke = bad ? '#fb923c' : 'oklch(var(--glow-color))'
+  const last = pts[pts.length - 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[18px] w-12">
+      <path d={line} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r={1.8} fill={stroke} />
+    </svg>
   )
 }
 

@@ -15,6 +15,7 @@ import {
   type FingerprintResult,
 } from '@/lib/flare-fingerprint'
 import { detectFindings, severityRank, type RecentLab } from '@/lib/findings'
+import { summarizeLabs, type LabSummary } from '@/lib/labs'
 
 const PATIENT_ID = 'alex'
 
@@ -231,6 +232,18 @@ export async function getNutrientGaps(days = 14): Promise<NutritionAnalysis> {
     )
 
   return analyzeNutrition(meals, days)
+}
+
+// ─── Labs (from imported FHIR records) ─────────────────────────────────────────
+
+/** IBD-aware summary of imported lab observations (latest, trend, status). */
+export async function getLabSummary(): Promise<LabSummary[]> {
+  const rows = await db
+    .select()
+    .from(logEntries)
+    .where(and(eq(logEntries.patientId, PATIENT_ID), eq(logEntries.entryType, 'lab')))
+    .orderBy(logEntries.loggedAt)
+  return summarizeLabs(rows)
 }
 
 // ─── Flare Fingerprint ────────────────────────────────────────────────────────

@@ -1,13 +1,14 @@
-import { getRecentLogEntries, getScoreHistory, getMedications } from '@/lib/actions'
+import { getRecentLogEntries, getScoreHistory, getMedications, getLabSummary } from '@/lib/actions'
 import { DoctorReport } from '@/components/report/doctor-report'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ReportPage() {
-  const [entries, scoreHistory, meds] = await Promise.all([
+  const [entries, scoreHistory, meds, labs] = await Promise.all([
     getRecentLogEntries(100),
     getScoreHistory(30),
     getMedications(),
+    getLabSummary(),
   ])
 
   return (
@@ -18,7 +19,7 @@ export default async function ReportPage() {
           <p className="text-sm text-muted-foreground">GI-ready summary for your next appointment</p>
         </div>
       </div>
-      <DoctorReport entries={entries} scoreHistory={scoreHistory} medications={meds} />
+      <DoctorReport entries={entries} scoreHistory={scoreHistory} medications={meds} labs={labs} />
     </div>
   )
 }
