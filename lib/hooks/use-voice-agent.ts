@@ -9,6 +9,8 @@ import {
   voiceGetDietGuidance,
   voiceGetFlareFingerprint,
   voiceGetSignals,
+  voiceGetLabs,
+  voiceGetFoodExerciseTrends,
 } from '@/lib/voice-tools'
 import { AID_AI_GUIDANCE } from '@/lib/ibd-aid'
 import { FLARE_AI_GUIDANCE } from '@/lib/flare-fingerprint'
@@ -30,7 +32,11 @@ const SESSION_INSTRUCTIONS = `You are FlareLens, a warm, attentive AI health com
 
 Your job:
 - LOG health events when the user describes them (bowel movements, symptoms, meals, medications, sleep, exercise) using the log_health_entry function. After logging, briefly confirm what you recorded in plain language.
-- ANSWER questions about their health using get_today_status, get_recent_activity, and get_trend. Be specific and reference real numbers.
+- ANSWER questions about their health using the data tools. Be specific and reference real numbers:
+  • get_today_status / get_recent_activity / get_trend for today, recent entries, and the stability-score history.
+  • get_labs for lab results from their medical records (CRP, fecal calprotectin, ferritin, hemoglobin, etc.) — use this for ANY question about labs, inflammation markers, or bloodwork; cite the value, whether it's high/low, and the direction.
+  • get_food_exercise_trends for how their meals (anti-inflammatory balance, trigger foods) and exercise have been trending — use this for "how's my diet/eating been", "am I exercising enough", or meal/movement pattern questions.
+  • get_diet_guidance before giving food advice; get_flare_fingerprint for "why do I feel worse"; get_signals for anything urgent.
 - ENCOURAGE and reassure. You are supportive but never give definitive medical diagnoses. If something sounds serious (e.g. heavy blood, severe pain, high fever), gently suggest contacting their doctor.
 
 When logging, infer the single most relevant entryType and fill the structured data fields you can. Don't ask for fields the user didn't mention. If the user reports multiple things at once, call log_health_entry multiple times. For meals, set food_class (anti-inflammatory / neutral / pro-inflammatory) and any fitting IBD tags; for exercise, capture intensity and post-workout fatigue when mentioned.
@@ -118,6 +124,23 @@ const TOOLS = [
     description:
       "Get the background analyst's current findings, ranked by severity. Call at the start of a conversation to proactively surface anything important.",
     parameters: { type: 'object', properties: {} },
+  },
+  {
+    type: 'function',
+    name: 'get_labs',
+    description:
+      'Get the latest lab results from the patient\'s imported medical records (CRP, fecal calprotectin, ferritin, hemoglobin, WBC, albumin, ESR) with value, status (low/normal/high), and trend. Use for ANY question about labs, inflammation markers, or bloodwork.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    type: 'function',
+    name: 'get_food_exercise_trends',
+    description:
+      'Get how the patient\'s diet (anti-inflammatory vs. pro-inflammatory meal balance, common trigger foods) and exercise (active days, total minutes, trend) have been over the last N days. Use for meal/diet/movement pattern questions.',
+    parameters: {
+      type: 'object',
+      properties: { days: { type: 'number', description: 'Window in days (default 14)' } },
+    },
   },
 ]
 
@@ -264,6 +287,12 @@ export function useVoiceAgent() {
             break
           case 'get_signals':
             result = await voiceGetSignals()
+            break
+          case 'get_labs':
+            result = await voiceGetLabs()
+            break
+          case 'get_food_exercise_trends':
+            result = await voiceGetFoodExerciseTrends(args as never)
             break
           default:
             result = { error: `Unknown function ${name}` }

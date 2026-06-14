@@ -6,7 +6,10 @@ import {
   getDietGuidance,
   getFlareFingerprint,
   getFindings,
+  getLabSummary,
 } from '@/lib/actions'
+import { concerningLabsLine } from '@/lib/labs'
+import { computeFoodExerciseTrends, trendsSummaryLine } from '@/lib/trends'
 
 export const maxDuration = 30
 
@@ -66,18 +69,32 @@ export async function POST(req: NextRequest) {
   // Gather a compact context so the assistant can answer questions with real data.
   let contextBlock = ''
   try {
-    const [score, recent, diet, fp, findings] = await Promise.all([
+    const [score, recent, diet, fp, findings, labs] = await Promise.all([
       getTodayScore().catch(() => null),
-      getRecentLogEntries(8).catch(() => []),
+      getRecentLogEntries(200).catch(() => []),
       getDietGuidance().catch(() => null),
       getFlareFingerprint().catch(() => null),
       getFindings().catch(() => []),
+      getLabSummary().catch(() => []),
     ])
     const recentLine = recent
+      .slice(0, 8)
       .map((e) => `${e.entryType}(${new Date(e.loggedAt).toISOString().slice(0, 10)})`)
       .join(', ')
+    // Food/exercise trends over the last 14 days.
+    const cutoff = Date.now() - 14 * 86_400_000
+    const trends = computeFoodExerciseTrends(recent.filter((e) => new Date(e.loggedAt).getTime() >= cutoff))
+    // All labs (latest value + status + trend), with the concerning ones called out.
+    const labsLine = labs.length
+      ? labs
+          .map((l) => `${l.label} ${l.latest}${l.unit ? ' ' + l.unit : ''} (${l.status}${l.trend ? `, ${l.trend}` : ''})`)
+          .join('; ')
+      : ''
+    const concerning = concerningLabsLine(labs)
     contextBlock = buildContext([
       score ? `Stability score today: ${Number(score.totalScore)}/100${score.isFlareDayBoolean ? ' (flare day)' : ''}. Reasons: ${(score.scoreReasons as string[] | undefined)?.join('; ') || 'n/a'}.` : '',
+      labsLine ? `Recent labs (from medical records): ${labsLine}.${concerning ? ` Concerning: ${concerning}.` : ''}` : '',
+      `Food & exercise (last 14 days): ${trendsSummaryLine(trends)}`,
       diet ? `Diet phase: ${diet.phaseInfo.name}. Emphasize: ${diet.phaseInfo.emphasize?.slice(0, 4).join(', ')}. Today so far — anti-inflammatory: ${diet.todayAnti}, pro-inflammatory: ${diet.todayPro}.` : '',
       fp?.today ? `Flare fingerprint: ${fp.today.narrative}` : '',
       findings.length ? `Active findings: ${findings.map((f) => f.title).join('; ')}.` : '',

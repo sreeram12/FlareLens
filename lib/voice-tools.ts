@@ -11,7 +11,9 @@ import {
   getDietGuidance,
   getFlareFingerprint,
   getFindings,
+  getLabSummary,
 } from '@/lib/actions'
+import { computeFoodExerciseTrends, trendsSummaryLine } from '@/lib/trends'
 
 type EntryType =
   | 'bowel_movement'
@@ -124,4 +126,33 @@ export async function voiceGetFlareFingerprint() {
 export async function voiceGetSignals() {
   const items = await getFindings()
   return items.map((f) => ({ type: f.type, severity: f.severity, title: f.title, detail: f.detail }))
+}
+
+export async function voiceGetLabs() {
+  const labs = await getLabSummary()
+  if (labs.length === 0) {
+    return { labs: [], note: 'No lab results imported yet — connect medical records on the Import page.' }
+  }
+  return {
+    labs: labs.map((l) => ({
+      name: l.label,
+      latest: l.latest,
+      unit: l.unit,
+      status: l.status, // low | normal | high
+      trend: l.trend, // up | down | flat | null
+      prior: l.prior,
+      concerning: l.concerning,
+      lastMeasured: l.latestDate,
+      note: l.note,
+    })),
+  }
+}
+
+export async function voiceGetFoodExerciseTrends(args: { days?: number | null }) {
+  const days = args?.days ?? 14
+  const all = await getRecentLogEntries(200)
+  const cutoff = Date.now() - days * 86_400_000
+  const inRange = all.filter((e) => new Date(e.loggedAt).getTime() >= cutoff)
+  const t = computeFoodExerciseTrends(inRange)
+  return { days, summary: trendsSummaryLine(t), ...t }
 }

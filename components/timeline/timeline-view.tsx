@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { getScoreLabel } from '@/lib/stability-score'
 import { flagLab } from '@/lib/labs'
+import { computeFoodExerciseTrends, type TrendDir, type FoodExerciseTrends } from '@/lib/trends'
 import { evaluateMealForPhase, tagLabel, tagLean, type AidPhase, type FoodClass } from '@/lib/ibd-aid'
 
 type Data = Record<string, unknown>
@@ -83,6 +84,7 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
     )
   }, [entries, filter, range])
   const grouped = useMemo(() => groupByDay(filtered), [filtered])
+  const trends = useMemo(() => computeFoodExerciseTrends(filtered), [filtered])
   const scoreMap = useMemo(() => {
     const m: Record<string, ScoreDay> = {}
     for (const s of scoreHistory) m[s.date] = s
@@ -135,6 +137,10 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
         ))}
       </div>
 
+      {(trends.meals.total > 0 || trends.exercise.sessions > 0) && filter === 'all' && (
+        <TrendsCard trends={trends} days={range} />
+      )}
+
       {grouped.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">No entries found.</p>
@@ -149,10 +155,18 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
               const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
               const wearable = dayEntries.find((e) => e.entryType === 'wearable')
               const labs = dayEntries.filter((e) => e.entryType === 'lab')
-              const records = dayEntries.filter((e) => e.entryType === 'clinical')
+              const records = dayEntries.filter((e) => {
+                if (e.entryType !== 'clinical') return false
+                const t = String((e.data as Data)?.text ?? '')
+                return t !== '' && t !== 'Not on File'
+              })
               const events = dayEntries.filter(
                 (e) => !['wearable', 'lab', 'clinical'].includes(e.entryType)
               )
+              // Skip days with nothing worth showing (e.g. a stray placeholder record).
+              if (!wearable && labs.length === 0 && records.length === 0 && events.length === 0) {
+                return null
+              }
               return (
                 <section key={date.toISOString()} className="relative flex flex-col gap-2.5">
                   {/* Day node on the spine */}
@@ -505,6 +519,82 @@ function RecoveryStrip({ d }: { d: Data }) {
     <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card/50 px-2.5 py-1 text-[11px] text-muted-foreground">
       <HeartPulse className="h-3 w-3 shrink-0 text-cyan-400" />
       <span className="truncate">{parts.join('  ·  ')}</span>
+    </div>
+  )
+}
+
+// Crohn's-relevant patterns over the visible window: anti-inflammatory diet
+// adherence + triggers, and movement consistency.
+function TrendDelta({ dir }: { dir: TrendDir }) {
+  if (dir === 'up') return <ArrowUp className="h-3 w-3 text-emerald-400" />
+  if (dir === 'down') return <ArrowDown className="h-3 w-3 text-orange-400" />
+  return null
+}
+
+function pct(n: number, total: number): string {
+  return total ? `${Math.round((n / total) * 100)}%` : '0%'
+}
+
+function TrendsCard({ trends, days }: { trends: FoodExerciseTrends; days: number }) {
+  const { meals, exercise } = trends
+  return (
+    <div className="rounded-xl border border-border bg-card p-3.5">
+      <p className="label-mono mb-3">Patterns · last {days} days</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Anti-inflammatory diet */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-emerald-400">
+            <Salad className="h-3.5 w-3.5" strokeWidth={2.2} />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">Anti-inflammatory diet</span>
+          </div>
+          {meals.total > 0 ? (
+            <>
+              <div className="flex items-end gap-1.5">
+                <span className="text-2xl font-bold leading-none text-foreground tabular-nums">{meals.antiPct}%</span>
+                <span className="mb-0.5 flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                  <TrendDelta dir={meals.antiTrend} /> of {meals.total} meals
+                </span>
+              </div>
+              <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <span className="bg-emerald-400" style={{ width: pct(meals.anti, meals.total) }} />
+                <span className="bg-muted-foreground/40" style={{ width: pct(meals.neutral, meals.total) }} />
+                <span className="bg-orange-400" style={{ width: pct(meals.pro, meals.total) }} />
+              </div>
+              {meals.topTriggers.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Triggers: {meals.topTriggers.map((t) => `${t.label} ×${t.count}`).join(', ')}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">No meals logged in range.</p>
+          )}
+        </div>
+
+        {/* Movement */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-cyan-400">
+            <Dumbbell className="h-3.5 w-3.5" strokeWidth={2.2} />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">Movement</span>
+          </div>
+          {exercise.sessions > 0 ? (
+            <>
+              <div className="flex items-end gap-1.5">
+                <span className="text-2xl font-bold leading-none text-foreground tabular-nums">{exercise.activeDays}</span>
+                <span className="mb-0.5 flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                  <TrendDelta dir={exercise.trend} /> active day{exercise.activeDays === 1 ? '' : 's'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {exercise.totalMinutes} min total · ~{exercise.avgMinutesPerActiveDay} min/active day
+              </p>
+              <p className="text-[11px] text-muted-foreground/70">Regular moderate movement supports remission.</p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">No workouts logged in range.</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
