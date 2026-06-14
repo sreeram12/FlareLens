@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { Mic, MicOff, Sparkles, Check, Loader2, AlertTriangle, Info, Utensils, Activity, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useVoiceAgent } from '@/lib/hooks/use-voice-agent'
-import { saveLogEntry } from '@/lib/actions'
+import { saveLogEntry, computeAndSaveTodayScore } from '@/lib/actions'
 import { LogEntryPreview } from '@/components/log/log-entry-preview'
 import {
   Conversation,
@@ -18,13 +18,15 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { LogComposer } from './log-composer'
 
 const TOOL_LABELS: Record<string, string> = {
-  log_health_entry: 'Logged to your timeline',
+  log_health_entry: 'Drafted — review & save below',
   get_today_status: "Checked today's status",
   get_recent_activity: 'Reviewed recent activity',
   get_trend: 'Analyzed your trend',
   get_diet_guidance: 'Checked your diet phase',
   get_flare_fingerprint: 'Compared to your flare fingerprint',
   get_signals: 'Reviewed your latest signals',
+  get_labs: 'Pulled your lab results',
+  get_food_exercise_trends: 'Reviewed your food & exercise trends',
 }
 
 export interface AssistantAlert {
@@ -48,13 +50,21 @@ const EXAMPLES = [
 ]
 
 export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
-  const { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn } = useVoiceAgent()
   const router = useRouter()
   const endRef = useRef<HTMLDivElement>(null)
 
   const [draft, setDraft] = useState<ParsedEntry | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Voice path: when the agent decides to log (after probing + the user agreeing),
+  // it surfaces a pre-filled review card here instead of saving outright.
+  const { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn } = useVoiceAgent({
+    onLogDraft: (d) => {
+      setImageUrl((p) => { if (p) URL.revokeObjectURL(p); return null })
+      setDraft({ entryType: d.entryType, summary: d.summary, data: d.data })
+    },
+  })
 
   const active = status !== 'idle' && status !== 'error'
   const hasTurns = turns.length > 0
@@ -116,6 +126,7 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
     setBusy(true)
     try {
       await saveLogEntry(draft.entryType, draft.data, undefined, imageUrl ? 'photo' : 'text')
+      await computeAndSaveTodayScore().catch(() => {})
       setDraft(null)
       clearImage()
       pushTurn('assistant', 'Saved to your timeline. ✓')

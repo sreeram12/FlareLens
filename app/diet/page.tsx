@@ -1,4 +1,4 @@
-import { getDietGuidance, getNutrientGaps } from '@/lib/actions'
+import { getDietGuidance, getNutrientGaps, getRecentLogEntries } from '@/lib/actions'
 import {
   AID_PRINCIPLES,
   ANTI_INFLAMMATORY_FOODS,
@@ -6,6 +6,8 @@ import {
   PHASES,
   type AidPhase,
 } from '@/lib/ibd-aid'
+import { computeFoodExerciseTrends } from '@/lib/trends'
+import { MealLog } from '@/components/diet/meal-log'
 import { Salad, Check, X, Utensils, Sparkles, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -18,11 +20,21 @@ const ACCENT: Record<string, { text: string; bg: string; ring: string; dot: stri
 }
 
 export default async function DietPage() {
-  const [{ phase, phaseInfo, todayAnti, todayPro }, nutrition] = await Promise.all([
+  const [{ phase, phaseInfo, todayAnti, todayPro }, nutrition, recentEntries] = await Promise.all([
     getDietGuidance(),
     getNutrientGaps(14),
+    getRecentLogEntries(200),
   ])
   const accent = ACCENT[phaseInfo.accent]
+
+  // The user's actual meals over the last ~30 days + anti-inflammatory balance.
+  // Anchor on the most recent entry (pure; avoids Date.now in render).
+  const anchor = recentEntries.reduce((mx, e) => Math.max(mx, new Date(e.loggedAt).getTime()), 0)
+  const cutoff = anchor - 30 * 86_400_000
+  const recentMeals = recentEntries.filter(
+    (e) => e.entryType === 'meal' && new Date(e.loggedAt).getTime() >= cutoff
+  )
+  const trends = computeFoodExerciseTrends(recentMeals)
 
   return (
     <main className="mx-auto max-w-md lg:max-w-3xl px-4 pb-24 pt-6">
@@ -60,6 +72,9 @@ export default async function DietPage() {
           </p>
         )}
       </section>
+
+      {/* What you've actually eaten + anti-inflammatory balance */}
+      <MealLog meals={recentMeals} phase={phase} trends={trends} />
 
       {/* Nutrient watch — from imported MacroFactor nutrition */}
       {nutrition.daysWithNutritionData > 0 && nutrition.gaps.length > 0 && (

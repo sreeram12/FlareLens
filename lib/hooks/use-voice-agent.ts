@@ -1,8 +1,7 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  voiceLogHealthEntry,
   voiceGetTodayStatus,
   voiceGetRecentActivity,
   voiceGetTrend,
@@ -31,7 +30,7 @@ const SAMPLE_RATE = 24000
 const SESSION_INSTRUCTIONS = `You are FlareLens, a warm, attentive AI health companion for someone managing Crohn's disease. You speak with the user out loud, so keep replies natural, concise, and easy to listen to — usually 1-3 short sentences.
 
 Your job:
-- LOG health events when the user describes them (bowel movements, symptoms, meals, medications, sleep, exercise) using the log_health_entry function. After logging, briefly confirm what you recorded in plain language.
+- LOG health events the user describes (bowel movements, symptoms, meals, medications, sleep, exercise). But DON'T log on the first mention. First ask one or two brief, natural follow-up questions to capture the key details — meal: what was in it and portion; symptom: how severe (0-10); exercise: type, duration, intensity; bowel movement: count, urgency, any blood; medication: which one and whether taken. Keep it conversational. Once you have enough and the user seems done describing it, ASK "Want me to log this?" Only AFTER they say yes, call the log_health_entry function. Calling it puts a pre-filled review card on their screen — so tell them you've added it for review and they can tweak and save it. Do NOT claim it's already saved.
 - ANSWER questions about their health using the data tools. Be specific and reference real numbers:
   • get_today_status / get_recent_activity / get_trend for today, recent entries, and the stability-score history.
   • get_labs for lab results from their medical records (CRP, fecal calprotectin, ferritin, hemoglobin, etc.) — use this for ANY question about labs, inflammation markers, or bloodwork; cite the value, whether it's high/low, and the direction.
@@ -172,7 +171,19 @@ function base64ToInt16(base64: string): Int16Array {
   return new Int16Array(bytes.buffer)
 }
 
-export function useVoiceAgent() {
+export interface LogDraft {
+  entryType: string
+  summary: string
+  data: Record<string, unknown>
+}
+
+export function useVoiceAgent({ onLogDraft }: { onLogDraft?: (draft: LogDraft) => void } = {}) {
+  // Keep the latest callback without re-binding the websocket handlers.
+  const onLogDraftRef = useRef(onLogDraft)
+  useEffect(() => {
+    onLogDraftRef.current = onLogDraft
+  }, [onLogDraft])
+
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [turns, setTurns] = useState<TranscriptTurn[]>([])
@@ -267,9 +278,18 @@ export function useVoiceAgent() {
       try {
         let result: unknown
         switch (name) {
-          case 'log_health_entry':
-            result = await voiceLogHealthEntry(args as never)
+          case 'log_health_entry': {
+            // Don't save outright — surface a pre-filled review card the user
+            // confirms & saves (parity with the typed flow).
+            const a = args as { entryType?: string; summary?: string; data?: Record<string, unknown> }
+            onLogDraftRef.current?.({
+              entryType: a.entryType ?? 'symptom',
+              summary: a.summary ?? '',
+              data: a.data ?? {},
+            })
+            result = { ok: true, shown: true, note: "A pre-filled review card is now on the user's screen to confirm and save." }
             break
+          }
           case 'get_today_status':
             result = await voiceGetTodayStatus()
             break
