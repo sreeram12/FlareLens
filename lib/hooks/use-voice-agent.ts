@@ -293,6 +293,13 @@ export function useVoiceAgent() {
     playheadRef.current = 0
     assistantTurnRef.current = null
     userTurnRef.current = null
+    // Finalize any in-flight turn so its "Thinking…/Transcribing…" spinner stops;
+    // drop empty placeholders that never received content.
+    setTurns((prev) =>
+      prev
+        .filter((t) => t.text.trim() !== '' || t.done)
+        .map((t) => (t.done ? t : { ...t, done: true }))
+    )
     setStatus('idle')
   }, [])
 

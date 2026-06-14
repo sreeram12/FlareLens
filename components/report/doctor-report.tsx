@@ -1,13 +1,14 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { format, subDays } from 'date-fns'
-import { FileText, AlertTriangle, CheckCircle2, Pill, TrendingUp, TrendingDown, Minus, Salad, FlaskConical, ArrowUp, ArrowDown } from 'lucide-react'
+import { FileText, AlertTriangle, CheckCircle2, Pill, TrendingUp, TrendingDown, Minus, Salad, FlaskConical, ArrowUp, ArrowDown, Sparkles, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LogEntry, Medication } from '@/lib/db/schema'
 import { getScoreLabel } from '@/lib/stability-score'
 import { analyzeNutrition } from '@/lib/nutrition-analysis'
-import { concerningLabsLine, type LabSummary } from '@/lib/labs'
+import { type LabSummary } from '@/lib/labs'
+import { buildGiQuestions } from '@/lib/report-questions'
 
 interface ScoreDay {
   scoreDate: string | Date
@@ -85,6 +86,78 @@ export function DoctorReport({ entries, scoreHistory, medications, labs }: Docto
   if (avgSleep > 0 && avgSleep < 5.5) redFlags.push(`Poor average sleep (${avgSleep.toFixed(1)}h)`)
 
   const { label: scoreLabel } = getScoreLabel(avgScore)
+
+  // Compact, serializable context shared by the rule-based fallback and the AI.
+  // Plain consts (React Compiler auto-memoizes); the effect keys off the stable
+  // JSON string so it only refetches when the underlying stats actually change.
+  const questionContext = {
+    period,
+    trend,
+    avgScore: Math.round(avgScore),
+    diseaseActivity: scoreLabel,
+    flareDays,
+    bloodDays,
+    maxPain,
+    avgBMPerDay: Math.round(avgBMPerDay * 10) / 10,
+    avgSleepHours: Math.round(avgSleep * 10) / 10,
+    labs: labs.map((l) => ({
+      name: l.label,
+      latest: l.latest,
+      unit: l.unit,
+      status: l.status,
+      trend: l.trend,
+      prior: l.prior,
+      concerning: l.concerning,
+    })),
+    nutrientGaps: nutrition.gaps.map((g) => g.label),
+    medications: medications.map((m) => m.medName),
+  }
+  const contextKey = JSON.stringify(questionContext)
+
+  // Rule-based questions — instant, used as a fallback while the AI loads / if it fails.
+  const fallbackQuestions = buildGiQuestions({
+    labs,
+    trend,
+    period,
+    avgScore,
+    flareDays,
+    bloodDays,
+    maxPain,
+    avgBMPerDay,
+    avgSleep,
+    nutritionGaps: nutrition.gaps,
+  })
+
+  // Grok analyzes the data and writes tailored questions; refetch when stats change.
+  const [aiQuestions, setAiQuestions] = useState<string[] | null>(null)
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setQuestionsLoading(true)
+      try {
+        const res = await fetch('/api/gi-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: contextKey,
+        })
+        const data = res.ok ? await res.json() : null
+        if (!cancelled) {
+          setAiQuestions(Array.isArray(data?.questions) && data.questions.length ? data.questions : null)
+        }
+      } catch {
+        if (!cancelled) setAiQuestions(null)
+      } finally {
+        if (!cancelled) setQuestionsLoading(false)
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [contextKey])
+
+  const giQuestions = aiQuestions ?? fallbackQuestions
 
   const today = format(new Date(), 'MMMM d, yyyy')
   const periodStart = format(cutoff, 'MMMM d')
@@ -264,29 +337,25 @@ export function DoctorReport({ entries, scoreHistory, medications, labs }: Docto
 
       {/* Questions to ask */}
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="label-mono mb-3">Suggested Questions for GI</p>
-        <ul className="flex flex-col gap-2">
-          {redFlags.includes('Blood in stool') && (
-            <li className="text-sm text-foreground">Should we consider a colonoscopy given recent bleeding?</li>
-          )}
-          {avgScore >= 40 && (
-            <li className="text-sm text-foreground">Is my current medication dose adequate given elevated activity?</li>
-          )}
-          {trend === 'worsening' && (
-            <li className="text-sm text-foreground">My trend has been worsening over {period} days — should we adjust treatment?</li>
-          )}
-          {labs.some((l) => l.concerning) && (
-            <li className="text-sm text-foreground">
-              My recent labs show {concerningLabsLine(labs)} — should we repeat labs, adjust treatment, or investigate further?
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="label-mono">Suggested Questions for GI</p>
+          {questionsLoading ? (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Tailoring…
+            </span>
+          ) : aiQuestions ? (
+            <span className="flex items-center gap-1 text-[10px] font-medium text-primary">
+              <Sparkles className="h-3 w-3" /> Tailored by AI
+            </span>
+          ) : null}
+        </div>
+        <ul className="flex flex-col gap-2.5">
+          {giQuestions.map((q, i) => (
+            <li key={i} className="flex gap-2 text-sm text-foreground leading-relaxed">
+              <span className="mt-0.5 text-primary" aria-hidden>•</span>
+              <span>{q}</span>
             </li>
-          )}
-          {nutrition.gaps.length > 0 && (
-            <li className="text-sm text-foreground">
-              My nutrition tracking flags {nutrition.gaps.slice(0, 3).map(g => g.label).join(', ')} — should I supplement or adjust my diet, or check labs?
-            </li>
-          )}
-          <li className="text-sm text-foreground">Are there dietary changes that could help reduce flare frequency?</li>
-          <li className="text-sm text-foreground">When should I contact the office between appointments?</li>
+          ))}
         </ul>
       </div>
 
