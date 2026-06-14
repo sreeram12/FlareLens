@@ -154,10 +154,16 @@ export function getFieldSpec(entryType: string, key: string, value: unknown): Fi
   return { label, editor: { kind: 'text' }, order: 99 }
 }
 
-/** Order a data record's keys for display using FIELD_SPECS order, then alpha. */
+/**
+ * Fields to show in the editable preview, ordered. Returns the UNION of every
+ * field defined for the entryType (so the user can fill in details the parser
+ * missed — e.g. a vague "log exercise") plus any extra keys present in the data.
+ */
 export function orderedFields(entryType: string, data: Record<string, unknown>): string[] {
-  return Object.keys(data)
-    .filter((k) => k !== 'date') // internal import key, not user-facing
+  const specKeys = Object.keys(FIELD_SPECS[entryType] ?? {})
+  const dataKeys = Object.keys(data)
+  return Array.from(new Set([...specKeys, ...dataKeys]))
+    .filter((k) => k !== 'date' && k !== 'summary') // internal/handled-elsewhere keys
     .sort((a, b) => {
       const oa = FIELD_SPECS[entryType]?.[a]?.order ?? 90
       const ob = FIELD_SPECS[entryType]?.[b]?.order ?? 90

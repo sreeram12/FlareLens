@@ -167,6 +167,20 @@ export function useVoiceAgent() {
   const assistantTurnRef = useRef<string | null>(null)
   const userTurnRef = useRef<string | null>(null)
 
+  // Manual turns (typed chat / photo) share the same transcript as voice.
+  const manualIdRef = useRef(0)
+  const pushTurn = useCallback(
+    (role: 'user' | 'assistant', text: string, extra?: Partial<TranscriptTurn>) => {
+      const id = `m-${++manualIdRef.current}`
+      setTurns((prev) => [...prev, { id, role, text, done: true, ...extra }])
+      return id
+    },
+    []
+  )
+  const patchTurn = useCallback((id: string, patch: Partial<TranscriptTurn>) => {
+    setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+  }, [])
+
   const upsertTurn = useCallback((turn: TranscriptTurn) => {
     setTurns((prev) => {
       const idx = prev.findIndex((t) => t.id === turn.id)
@@ -429,5 +443,5 @@ export function useVoiceAgent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appendToTurn, handleFunctionCall, playAudioChunk, stop, upsertTurn])
 
-  return { status, error, turns, muted, start, stop, toggleMute }
+  return { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn }
 }

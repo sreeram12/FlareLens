@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Mic, MicOff, Sparkles, Check, Loader2, AlertTriangle, Info, Utensils, Activity, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useVoiceAgent } from '@/lib/hooks/use-voice-agent'
+import { saveLogEntry } from '@/lib/actions'
+import { LogEntryPreview } from '@/components/log/log-entry-preview'
 import {
   Conversation,
   ConversationContent,
@@ -31,6 +34,12 @@ export interface AssistantAlert {
   detail?: string | null
 }
 
+interface ParsedEntry {
+  entryType: string
+  data: Record<string, unknown>
+  summary: string
+}
+
 const EXAMPLES = [
   { icon: Utensils, text: '“I had oatmeal and berries for breakfast”' },
   { icon: Activity, text: '“Cramping and a 4 out of 10 pain today”' },
@@ -39,16 +48,90 @@ const EXAMPLES = [
 ]
 
 export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
-  const { status, error, turns, muted, start, stop, toggleMute } = useVoiceAgent()
+  const { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn } = useVoiceAgent()
   const router = useRouter()
   const endRef = useRef<HTMLDivElement>(null)
+
+  const [draft, setDraft] = useState<ParsedEntry | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const active = status !== 'idle' && status !== 'error'
   const hasTurns = turns.length > 0
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [turns])
+  }, [turns, draft])
+
+  function clearImage() {
+    setImageUrl((p) => { if (p) URL.revokeObjectURL(p); return null })
+  }
+
+  async function handleSendText(text: string) {
+    const history = turns
+      .filter((t) => t.done && t.text)
+      .map((t) => ({ role: t.role, text: t.text }))
+    pushTurn('user', text)
+    const aId = pushTurn('assistant', '', { done: false })
+    setBusy(true)
+    try {
+      const res = await fetch('/api/talk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...history, { role: 'user', text }] }),
+      })
+      const data = await res.json()
+      patchTurn(aId, { text: data.reply || 'Done.', done: true })
+      if (data.draft) { clearImage(); setDraft(data.draft) }
+    } catch {
+      patchTurn(aId, { text: 'Sorry — something went wrong. Try again?', done: true })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSendImage(file: File) {
+    pushTurn('user', '📷 Sent a meal photo')
+    setImageUrl((p) => { if (p) URL.revokeObjectURL(p); return URL.createObjectURL(file) })
+    const aId = pushTurn('assistant', '', { done: false })
+    setBusy(true)
+    const form = new FormData()
+    form.append('image', file)
+    try {
+      const res = await fetch('/api/vision-meal', { method: 'POST', body: form })
+      if (!res.ok) throw new Error()
+      const parsed = (await res.json()) as ParsedEntry
+      patchTurn(aId, { text: "Here's what I see on your plate — review the details and save.", done: true })
+      setDraft(parsed)
+    } catch {
+      patchTurn(aId, { text: "I couldn't read that photo — want to try another?", done: true })
+      clearImage()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveDraft() {
+    if (!draft) return
+    setBusy(true)
+    try {
+      await saveLogEntry(draft.entryType, draft.data, undefined, imageUrl ? 'photo' : 'text')
+      setDraft(null)
+      clearImage()
+      pushTurn('assistant', 'Saved to your timeline. ✓')
+      router.refresh()
+    } catch {
+      pushTurn('assistant', 'That failed to save — want to try again?')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function discardDraft() {
+    setDraft(null)
+    clearImage()
+    pushTurn('assistant', "Okay — I won't save that.")
+  }
 
   return (
     <div className="flex h-[calc(100vh-5rem)] flex-col lg:h-[calc(100vh-2.5rem)]">
@@ -106,7 +189,7 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
       {/* Conversation */}
       <Conversation className="flex-1">
         <ConversationContent className="px-4">
-          {!hasTurns ? (
+          {!hasTurns && !draft ? (
             <div className="flex flex-col items-center justify-center gap-5 py-8 text-center">
               <ConversationEmptyState
                 icon={<Mic className="size-10 text-primary" />}
@@ -151,6 +234,24 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
                   </MessageContent>
                 </Message>
               ))}
+
+              {/* Editable draft — review & correct before it's saved */}
+              {draft && (
+                <div className="mt-2">
+                  {imageUrl && (
+                    <Image
+                      src={imageUrl}
+                      alt="Meal"
+                      width={400}
+                      height={140}
+                      unoptimized
+                      className="mb-2 h-32 w-full rounded-xl border border-border object-cover"
+                    />
+                  )}
+                  <LogEntryPreview parsed={draft} onChange={setDraft} onSave={saveDraft} onDiscard={discardDraft} />
+                </div>
+              )}
+
               <div ref={endRef} />
             </>
           )}
@@ -168,9 +269,11 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
       <LogComposer
         voiceActive={active}
         status={status}
+        busy={busy}
         onStartVoice={start}
         onStopVoice={stop}
-        onLogged={() => router.refresh()}
+        onSendText={handleSendText}
+        onSendImage={handleSendImage}
       />
     </div>
   )
