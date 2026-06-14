@@ -1,5 +1,6 @@
 import { MacroFactorImporter } from '@/components/imports/macrofactor-importer'
 import { FastenImporter } from '@/components/imports/fasten-importer'
+import { FastenConnect } from '@/components/imports/fasten-connect'
 import { getRecentLogEntries } from '@/lib/actions'
 import { Upload } from 'lucide-react'
 
@@ -24,6 +25,8 @@ export default async function ImportsPage() {
           against your personal baseline. Data is matched by date and merged into your timeline.
         </p>
       </header>
+
+      <FastenConnect initialCount={fastenCount} />
 
       <FastenImporter alreadyImported={fastenCount} />
 

@@ -236,6 +236,15 @@ export async function getNutrientGaps(days = 14): Promise<NutritionAnalysis> {
 
 // ─── Labs (from imported FHIR records) ─────────────────────────────────────────
 
+/** Count of imported Fasten records — used to detect when a sync has landed. */
+export async function getFastenRecordCount(): Promise<number> {
+  const rows = await db
+    .select({ id: logEntries.id })
+    .from(logEntries)
+    .where(and(eq(logEntries.patientId, PATIENT_ID), eq(logEntries.source, 'fasten')))
+  return rows.length
+}
+
 /** IBD-aware summary of imported lab observations (latest, trend, status). */
 export async function getLabSummary(): Promise<LabSummary[]> {
   const rows = await db
