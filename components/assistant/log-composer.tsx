@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import Image from 'next/image'
-import { Camera, Mic, Send, Loader2, Square, AudioLines } from 'lucide-react'
+import { Camera, Mic, Send, Loader2, Square, AudioLines, Check } from 'lucide-react'
 import { saveLogEntry } from '@/lib/actions'
 import { LogEntryPreview } from '@/components/log/log-entry-preview'
 import type { VoiceStatus } from '@/lib/hooks/use-voice-agent'
@@ -12,7 +12,7 @@ interface ParsedEntry {
   data: Record<string, unknown>
   summary: string
 }
-type Stage = 'idle' | 'parsing' | 'preview' | 'saving'
+type Stage = 'idle' | 'parsing' | 'preview' | 'saving' | 'saved'
 
 interface LogComposerProps {
   voiceActive: boolean
@@ -94,8 +94,10 @@ export function LogComposer({ voiceActive, status, onStartVoice, onStopVoice, on
     setStage('saving')
     try {
       await saveLogEntry(parsed.entryType, parsed.data, undefined, imageUrl ? 'photo' : 'text')
-      reset()
       onLogged?.()
+      // Peak-End: a brief, satisfying confirmation before clearing.
+      setStage('saved')
+      setTimeout(reset, 1100)
     } catch {
       setError('Failed to save — try again.')
       setStage('preview')
@@ -137,6 +139,12 @@ export function LogComposer({ voiceActive, status, onStartVoice, onStopVoice, on
         </div>
       )}
 
+      {stage === 'saved' && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm font-medium text-emerald-400 animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none">
+          <Check className="h-4 w-4" strokeWidth={2.6} /> Logged to your timeline
+        </div>
+      )}
+
       {voiceActive ? (
         <div className="flex items-center justify-between gap-3 rounded-full border border-primary/40 bg-primary/10 px-4 py-2.5">
           <span className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -144,7 +152,7 @@ export function LogComposer({ voiceActive, status, onStartVoice, onStopVoice, on
           </span>
           <button
             onClick={onStopVoice}
-            className="flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-transform active:scale-95"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-transform active:scale-95 hover:bg-secondary/60"
           >
             <Square className="h-3 w-3" /> End
           </button>
@@ -178,7 +186,7 @@ export function LogComposer({ voiceActive, status, onStartVoice, onStopVoice, on
               type="button"
               onClick={onStartVoice}
               aria-label="Start talking"
-              className="glow flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform active:scale-95"
+              className="orb-pulse flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform active:scale-95"
             >
               <Mic className="h-5 w-5" />
             </button>
