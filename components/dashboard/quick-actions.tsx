@@ -12,7 +12,7 @@ export function QuickActions({ currentScore }: { currentScore: number }) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Link href="/" className={cn(base, 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15')}>
+      <Link href="/talk" className={cn(base, 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15')}>
         <Mic className="h-4 w-4" strokeWidth={2} /> Talk &amp; Log
       </Link>
       {showFlareAlert && (

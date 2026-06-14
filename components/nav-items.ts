@@ -13,8 +13,8 @@ export interface NavItem {
  * Hick's Law); the desktop sidebar has room for Import too.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Talk', icon: Mic },
-  { href: '/today', label: 'Today', icon: Activity },
+  { href: '/', label: 'Today', icon: Activity },
+  { href: '/talk', label: 'Talk', icon: Mic },
   { href: '/diet', label: 'Diet', icon: Salad },
   { href: '/timeline', label: 'Timeline', icon: ListOrdered },
   { href: '/imports', label: 'Import', icon: Upload, desktopOnly: true },

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mic, MicOff, Sparkles, Check, Loader2 } from 'lucide-react'
+import { Mic, MicOff, Sparkles, Check, Loader2, AlertTriangle, Info, Utensils, Activity, Camera } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useVoiceAgent } from '@/lib/hooks/use-voice-agent'
 import {
@@ -24,7 +24,21 @@ const TOOL_LABELS: Record<string, string> = {
   get_signals: 'Reviewed your latest signals',
 }
 
-export function VoiceAssistant() {
+export interface AssistantAlert {
+  id: string | number
+  severity: string
+  title: string
+  detail?: string | null
+}
+
+const EXAMPLES = [
+  { icon: Utensils, text: '“I had oatmeal and berries for breakfast”' },
+  { icon: Activity, text: '“Cramping and a 4 out of 10 pain today”' },
+  { icon: Sparkles, text: '“How has my trend been this week?”' },
+  { icon: Camera, text: 'Snap a photo of your plate to log it' },
+]
+
+export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
   const { status, error, turns, muted, start, stop, toggleMute } = useVoiceAgent()
   const router = useRouter()
   const endRef = useRef<HTMLDivElement>(null)
@@ -45,8 +59,8 @@ export function VoiceAssistant() {
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-base font-semibold leading-tight">FlareLens</h1>
-            <p className="text-xs text-muted-foreground leading-tight">Voice companion · powered by Grok</p>
+            <h1 className="text-base font-semibold leading-tight">Talk &amp; Log</h1>
+            <p className="text-xs text-muted-foreground leading-tight">Say it, snap it, or type it — I&apos;ll track it</p>
           </div>
         </div>
         {active && (
@@ -63,16 +77,57 @@ export function VoiceAssistant() {
         )}
       </header>
 
+      {/* Important info / alerts — surfaced at the top so nothing gets missed */}
+      {alerts.length > 0 && (
+        <div className="mx-4 mb-2 flex flex-col gap-1.5">
+          {alerts.slice(0, 2).map((a) => {
+            const urgent = a.severity === 'high' || a.severity === 'critical'
+            return (
+              <div
+                key={a.id}
+                className={cn(
+                  'flex items-start gap-2 rounded-lg border px-3 py-2 text-xs',
+                  urgent
+                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                    : 'border-amber-500/30 bg-amber-500/10 text-amber-200/90'
+                )}
+              >
+                {urgent ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                <span>
+                  <span className="font-semibold text-foreground">{a.title}</span>
+                  {a.detail ? <span className="text-muted-foreground"> — {a.detail}</span> : null}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Conversation */}
       <Conversation className="flex-1">
         <ConversationContent className="px-4">
           {!hasTurns ? (
-            <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
+            <div className="flex flex-col items-center justify-center gap-5 py-8 text-center">
               <ConversationEmptyState
                 icon={<Mic className="size-10 text-primary" />}
-                title="Talk, type, or snap a meal"
-                description="Tell me how you're feeling, log a meal by photo, or ask about your trends. I'll capture it, keep your score current, and talk back."
+                title="What's this for?"
+                description="This is your hands-free health journal. Just say how you're feeling, what you ate, or ask about your trends — FlareLens captures it, updates your stability score, and talks back. No forms."
               />
+              <div className="flex w-full max-w-sm flex-col gap-2">
+                <p className="label-mono text-muted-foreground/70">Try saying</p>
+                {EXAMPLES.map(({ icon: Icon, text }) => (
+                  <div
+                    key={text}
+                    className="flex items-center gap-2.5 rounded-lg border border-border bg-card/60 px-3 py-2 text-left text-sm text-muted-foreground"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-primary/80" strokeWidth={1.9} />
+                    <span>{text}</span>
+                  </div>
+                ))}
+                <p className="mt-1 text-[11px] text-muted-foreground/60">
+                  Tap the mic below to start, or type in the box. Everything stays private to you.
+                </p>
+              </div>
             </div>
           ) : (
             <>
