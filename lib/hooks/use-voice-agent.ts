@@ -26,6 +26,7 @@ export interface TranscriptTurn {
 }
 
 const SAMPLE_RATE = 24000
+const TRANSCRIPT_KEY = 'flarelens.transcript'
 
 const SESSION_INSTRUCTIONS = `You are FlareLens, a warm, attentive AI health companion for someone managing Crohn's disease. You speak with the user out loud, so keep replies natural, concise, and easy to listen to — usually 1-3 short sentences.
 
@@ -188,6 +189,40 @@ export function useVoiceAgent({ onLogDraft }: { onLogDraft?: (draft: LogDraft) =
   const [error, setError] = useState<string | null>(null)
   const [turns, setTurns] = useState<TranscriptTurn[]>([])
   const [muted, setMuted] = useState(false)
+
+  // Persist the transcript for the session so it survives re-renders, dev
+  // hot-reloads, and tab switches (it lives in client state, which would
+  // otherwise reset — making replies "appear then disappear").
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    try {
+      const raw = sessionStorage.getItem(TRANSCRIPT_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed) && parsed.length) {
+          // One-time restore from an external store on mount (avoids SSR
+          // hydration mismatch that a lazy initializer would cause).
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setTurns(parsed.map((t: TranscriptTurn) => ({ ...t, done: true })))
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  useEffect(() => {
+    // Only persist real, completed turns — never the transient "thinking"
+    // placeholder (so a reply mid-flight can't be saved/restored as empty).
+    const persistable = turns.filter((t) => t.done && t.text.trim() !== '')
+    if (persistable.length === 0) return
+    try {
+      sessionStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(persistable))
+    } catch {
+      /* ignore */
+    }
+  }, [turns])
 
   const wsRef = useRef<WebSocket | null>(null)
   const inputCtxRef = useRef<AudioContext | null>(null)
