@@ -105,6 +105,25 @@ export function summarizeLabs(entries: { data: unknown }[]): LabSummary[] {
   return out.sort((a, b) => Number(b.concerning) - Number(a.concerning) || a.label.localeCompare(b.label))
 }
 
+/**
+ * Per-entry flag for a single raw lab observation (used by the timeline to mark
+ * abnormal results without recomputing the whole summary). Returns key=null for
+ * labs outside the IBD reference panel (we have no range for those).
+ */
+export function flagLab(data: unknown): { key: string | null; status: LabStatus | null; concerning: boolean } {
+  const d = (data ?? {}) as Record<string, unknown>
+  const key = Object.keys(REF).find((k) => typeof d[k] === 'number')
+  if (!key) return { key: null, status: null, concerning: false }
+  const ref = REF[key]
+  const value = Number(d[key])
+  let status: LabStatus = 'normal'
+  if (ref.high != null && value > ref.high) status = 'high'
+  if (ref.low != null && value < ref.low) status = 'low'
+  const concerning =
+    (ref.concern === 'high' && status === 'high') || (ref.concern === 'low' && status === 'low')
+  return { key, status, concerning }
+}
+
 /** One-line clinician-facing summary of the concerning labs (for AI guidance / questions). */
 export function concerningLabsLine(labs: LabSummary[]): string {
   const c = labs.filter((l) => l.concerning)

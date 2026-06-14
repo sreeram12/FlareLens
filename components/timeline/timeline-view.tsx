@@ -6,9 +6,11 @@ import type { LogEntry } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 import {
   Droplets, Heart, Utensils, Pill, Moon, Dumbbell, Activity, Circle, Scale,
-  HeartPulse, Check, AlertTriangle, Footprints, Wind, Salad,
+  HeartPulse, Check, AlertTriangle, Footprints, Wind, Salad, FlaskConical, Stethoscope,
+  ArrowUp, ArrowDown,
 } from 'lucide-react'
 import { getScoreLabel } from '@/lib/stability-score'
+import { flagLab } from '@/lib/labs'
 import { evaluateMealForPhase, tagLabel, tagLean, type AidPhase, type FoodClass } from '@/lib/ibd-aid'
 
 type Data = Record<string, unknown>
@@ -138,21 +140,36 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
           <p className="text-sm text-muted-foreground">No entries found.</p>
         </div>
       ) : (
-        <div className="lg:columns-2 lg:gap-4">
-          {grouped.map(({ date, entries: dayEntries }) => {
-            const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
-            const wearable = dayEntries.find((e) => e.entryType === 'wearable')
-            const events = dayEntries.filter((e) => e.entryType !== 'wearable')
-            return (
-              <section key={date.toISOString()} className="flex flex-col gap-2 break-inside-avoid lg:mb-4">
-                <div className="flex items-center justify-between sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-1 lg:static lg:bg-transparent">
-                  <p className="label-mono">{dayLabel(date)}</p>
-                  {scoreDay && <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />}
-                </div>
+        // Single chronological column with a vertical spine — reads top-to-bottom,
+        // no masonry (which put unrelated dates side-by-side and broke reading order).
+        <div className="relative pl-7">
+          <span aria-hidden className="absolute left-[6px] top-2 bottom-2 w-px bg-border" />
+          <div className="flex flex-col gap-7">
+            {grouped.map(({ date, entries: dayEntries }) => {
+              const scoreDay = scoreMap[format(date, 'yyyy-MM-dd')]
+              const wearable = dayEntries.find((e) => e.entryType === 'wearable')
+              const labs = dayEntries.filter((e) => e.entryType === 'lab')
+              const records = dayEntries.filter((e) => e.entryType === 'clinical')
+              const events = dayEntries.filter(
+                (e) => !['wearable', 'lab', 'clinical'].includes(e.entryType)
+              )
+              return (
+                <section key={date.toISOString()} className="relative flex flex-col gap-2.5">
+                  {/* Day node on the spine */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute -left-7 top-1 h-3.5 w-3.5 rounded-full border-2 bg-background',
+                      scoreDay?.isFlareDay ? 'border-rose-400 shadow-[0_0_8px_1px_oklch(0.7_0.18_15/50%)]' : 'border-primary'
+                    )}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="label-mono text-foreground">{dayLabel(date)}</p>
+                    {scoreDay && <ScorePill score={scoreDay.score} isFlareDay={scoreDay.isFlareDay} />}
+                  </div>
 
-                {wearable && <RecoveryStrip d={(wearable.data ?? {}) as Data} />}
+                  {wearable && <RecoveryStrip d={(wearable.data ?? {}) as Data} />}
 
-                <div className="flex flex-col gap-2">
                   {events.map((entry) => {
                     const meta = ENTRY_META[entry.entryType] ?? {
                       label: entry.entryType, icon: Circle, color: 'text-muted-foreground', accent: 'border-l-border',
@@ -183,12 +200,101 @@ export function TimelineView({ entries, scoreHistory, phase, phaseName }: Timeli
                       </div>
                     )
                   })}
-                </div>
-              </section>
-            )
-          })}
+
+                  {labs.length > 0 && <LabGroupCard entries={labs} />}
+                  {records.length > 0 && <RecordGroupCard entries={records} />}
+                </section>
+              )
+            })}
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Grouped record cards (collapse synced labs/clinical into one tidy card) ───
+
+function LabGroupCard({ entries }: { entries: LogEntry[] }) {
+  const rows = entries
+    .map((e) => {
+      const d = (e.data ?? {}) as Data
+      return { d, flag: flagLab(d), name: String(d.lab_name ?? 'Lab') }
+    })
+    // Abnormal (in-panel) first, then everything else.
+    .sort((a, b) => Number(b.flag.concerning) - Number(a.flag.concerning))
+
+  const CAP = 6
+  const shown = rows.slice(0, CAP)
+  const extra = rows.length - shown.length
+
+  return (
+    <div className="rounded-lg border border-border border-l-2 border-l-violet-400/70 bg-card p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <FlaskConical className="h-3.5 w-3.5 text-violet-400" strokeWidth={2.4} />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-400">Labs</span>
+        <span className="text-[10px] text-muted-foreground/70">· {rows.length} {rows.length === 1 ? 'result' : 'results'} · from records</span>
+      </div>
+      <div className="flex flex-col divide-y divide-border/60">
+        {shown.map(({ d, flag, name }, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
+            <span className="text-xs text-foreground truncate">{name}</span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs font-medium text-foreground tabular-nums">
+                {String(d.value ?? '?')}{d.unit ? <span className="text-muted-foreground font-normal"> {String(d.unit)}</span> : null}
+              </span>
+              {flag.status && flag.status !== 'normal' && (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase',
+                    flag.concerning ? 'bg-orange-500/15 text-orange-400' : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {flag.status === 'high' ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />}
+                  {flag.status}
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+      {extra > 0 && <p className="mt-2 text-[11px] text-muted-foreground/70">+{extra} more {extra === 1 ? 'result' : 'results'}</p>}
+    </div>
+  )
+}
+
+const RECORD_KIND_LABEL: Record<string, string> = {
+  condition: 'Condition', encounter: 'Visit', procedure: 'Procedure',
+  allergy: 'Allergy', immunization: 'Immunization', document: 'Document',
+}
+
+function RecordGroupCard({ entries }: { entries: LogEntry[] }) {
+  const rows = entries
+    .map((e) => {
+      const d = (e.data ?? {}) as Data
+      return { kind: String(d.kind ?? 'record'), text: String(d.text ?? 'Record') }
+    })
+    .filter((r) => r.text && r.text !== 'Not on File')
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="rounded-lg border border-border border-l-2 border-l-violet-400/70 bg-card p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Stethoscope className="h-3.5 w-3.5 text-violet-400" strokeWidth={2.4} />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-400">Records</span>
+        <span className="text-[10px] text-muted-foreground/70">· from records</span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {RECORD_KIND_LABEL[r.kind] ?? r.kind}
+            </span>
+            <span className="text-xs text-foreground">{r.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

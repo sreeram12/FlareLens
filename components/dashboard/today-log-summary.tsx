@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import type { LogEntry, Medication } from '@/lib/db/schema'
-import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, CheckCircle2, Circle } from 'lucide-react'
+import { Droplets, Heart, Utensils, Pill, Moon, Dumbbell, CheckCircle2, Circle, HeartPulse, Scale, FlaskConical, Stethoscope } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -10,6 +10,10 @@ const ENTRY_META: Record<string, { label: string; icon: React.ElementType; color
   medication:     { label: 'Med', icon: Pill, color: 'text-purple-400' },
   sleep:          { label: 'Sleep', icon: Moon, color: 'text-indigo-400' },
   exercise:       { label: 'Exercise', icon: Dumbbell, color: 'text-emerald-400' },
+  wearable:       { label: 'Wearable', icon: HeartPulse, color: 'text-cyan-400' },
+  weight:         { label: 'Body', icon: Scale, color: 'text-amber-400' },
+  lab:            { label: 'Lab', icon: FlaskConical, color: 'text-violet-400' },
+  clinical:       { label: 'Record', icon: Stethoscope, color: 'text-violet-400' },
 }
 
 interface TodayLogSummaryProps {
@@ -32,8 +36,24 @@ function entryDescription(entry: LogEntry): string {
       return `${d.duration_hours ?? '?'}h · Quality ${d.quality ?? '?'}/10`
     case 'exercise':
       return `${d.type ?? 'Exercise'} ${d.duration_minutes ?? '?'} min · ${Number(d.steps ?? 0).toLocaleString()} steps`
+    case 'wearable':
+      return [
+        d.sleep_hours != null ? `Sleep ${d.sleep_hours}h` : null,
+        d.resting_hr != null ? `RHR ${d.resting_hr}` : null,
+        d.hrv != null ? `HRV ${d.hrv}` : null,
+        d.steps != null ? `${Number(d.steps).toLocaleString()} steps` : null,
+      ].filter(Boolean).join(' · ') || 'Wearable metrics'
+    case 'weight':
+      return [
+        d.weight_kg != null ? `${d.weight_kg} kg` : null,
+        d.fat_percent != null ? `${d.fat_percent}% body fat` : null,
+      ].filter(Boolean).join(' · ') || 'Body metrics'
+    case 'lab':
+      return `${d.lab_name ?? 'Lab'}: ${d.value ?? '?'}${d.unit ? ' ' + d.unit : ''}`
+    case 'clinical':
+      return `${d.text ?? 'Record'}${d.kind ? ` (${d.kind})` : ''}`
     default:
-      return JSON.stringify(d).slice(0, 60)
+      return typeof d.description === 'string' ? d.description : 'Logged entry'
   }
 }
 

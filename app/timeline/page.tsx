@@ -11,7 +11,7 @@ export default async function TimelinePage() {
   ])
 
   return (
-    <div className="mx-auto w-full max-w-2xl lg:max-w-5xl flex flex-col gap-4 px-4 pt-6 pb-4">
+    <div className="mx-auto w-full max-w-2xl flex flex-col gap-4 px-4 pt-6 pb-4">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Timeline</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Your health history, in context</p>
