@@ -31,45 +31,52 @@ export default async function HomePage() {
   const domainScores = (scoreData?.domainScores ?? {}) as Record<string, number>
   const scoreReasons = (scoreData?.scoreReasons ?? []) as string[]
 
-  const mappedSignals = signals.map((f) => ({
-    id: f.id, type: f.type, severity: f.severity, title: f.title, detail: f.detail,
-  }))
+  // The Flare Fingerprint card already covers fingerprint/baseline findings —
+  // keep the alerts feed for the rest (labs, meds, nutrition) so nothing repeats.
+  const mappedSignals = signals
+    .filter((f) => !['flare_fingerprint', 'baseline_drift'].includes(f.type))
+    .map((f) => ({ id: f.id, type: f.type, severity: f.severity, title: f.title, detail: f.detail }))
 
   return (
-    <div className="mx-auto w-full max-w-md lg:max-w-5xl flex flex-col gap-4 px-4 pt-6 pb-4">
+    <div className="mx-auto w-full max-w-md lg:max-w-5xl flex flex-col gap-7 px-4 pt-6 pb-4">
       <AnalysisRefresher />
       <TodayHeader patientName="Alex" />
 
       {/* Primary actions toolbar */}
       <QuickActions currentScore={totalScore} />
 
-      {/* Hero: stability (+reasons) | flare fingerprint (+signals) */}
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
-        <div className="flex flex-col gap-4">
-          <StabilityScoreCard
-            score={totalScore}
-            scoreHistory={scoreHistory.map(s => ({
-              date: s.scoreDate as string,
-              score: parseFloat(s.totalScore as string),
-              isFlareDay: s.isFlareDayBoolean ?? false,
-            }))}
-          />
-          {scoreReasons.length > 0 && <ScoreReasons reasons={scoreReasons} score={totalScore} />}
-        </div>
-        <div className="flex flex-col gap-4">
+      {/* 1 ─ How you're doing: the score is the headline, fingerprint beside it */}
+      <section className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="flex flex-col gap-4">
+            <StabilityScoreCard
+              score={totalScore}
+              scoreHistory={scoreHistory.map(s => ({
+                date: s.scoreDate as string,
+                score: parseFloat(s.totalScore as string),
+                isFlareDay: s.isFlareDayBoolean ?? false,
+              }))}
+            />
+            {scoreReasons.length > 0 && <ScoreReasons reasons={scoreReasons} score={totalScore} />}
+          </div>
           <FlareFingerprintCard />
-          <SignalsFeed findings={mappedSignals} />
         </div>
-      </div>
+      </section>
 
-      {/* Domains span full width (internally a 2-col grid) */}
+      {/* 2 ─ What needs attention (only renders when there's something) */}
+      {mappedSignals.length > 0 && <SignalsFeed findings={mappedSignals} />}
+
+      {/* 3 ─ Domain breakdown (self-labelled) */}
       <DomainCards domainScores={domainScores} entries={todayEntries} reasons={scoreReasons} />
 
-      {/* Reference row */}
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
-        <AidPhaseCard />
-        <TodayLogSummary entries={todayEntries} medications={meds} />
-      </div>
+      {/* 4 ─ Reference: diet phase + today's log */}
+      <section className="flex flex-col gap-3">
+        <p className="label-mono">Today &amp; your plan</p>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+          <AidPhaseCard />
+          <TodayLogSummary entries={todayEntries} medications={meds} />
+        </div>
+      </section>
     </div>
   )
 }
