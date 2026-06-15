@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Mic, MicOff, Sparkles, Check, Loader2, AlertTriangle, Info, Utensils, Activity, Camera } from 'lucide-react'
+import { Mic, MicOff, Sparkles, Check, Loader2, AlertTriangle, Info, Utensils, Activity, Camera, Eraser } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useVoiceAgent } from '@/lib/hooks/use-voice-agent'
 import { saveLogEntry, computeAndSaveTodayScore } from '@/lib/actions'
@@ -59,12 +59,18 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
 
   // Voice path: when the agent decides to log (after probing + the user agreeing),
   // it surfaces a pre-filled review card here instead of saving outright.
-  const { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn } = useVoiceAgent({
+  const { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn, clearTurns } = useVoiceAgent({
     onLogDraft: (d) => {
       setImageUrl((p) => { if (p) URL.revokeObjectURL(p); return null })
       setDraft({ entryType: d.entryType, summary: d.summary, data: d.data })
     },
   })
+
+  function clearConversation() {
+    clearTurns()
+    setDraft(null)
+    setImageUrl((p) => { if (p) URL.revokeObjectURL(p); return null })
+  }
 
   const active = status !== 'idle' && status !== 'error'
   const hasTurns = turns.length > 0
@@ -157,18 +163,29 @@ export function VoiceAssistant({ alerts = [] }: { alerts?: AssistantAlert[] }) {
             <p className="text-xs text-muted-foreground leading-tight">Say it, snap it, or type it — I&apos;ll track it</p>
           </div>
         </div>
-        {active && (
-          <button
-            onClick={toggleMute}
-            aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
-            className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors',
-              muted ? 'bg-destructive/15 text-destructive' : 'bg-primary/15 text-primary'
-            )}
-          >
-            {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {(hasTurns || draft) && (
+            <button
+              onClick={clearConversation}
+              aria-label="Clear conversation"
+              className="flex items-center gap-1.5 rounded-xl border border-border px-2.5 h-9 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            >
+              <Eraser className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
+          {active && (
+            <button
+              onClick={toggleMute}
+              aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl border border-border transition-colors',
+                muted ? 'bg-destructive/15 text-destructive' : 'bg-primary/15 text-primary'
+              )}
+            >
+              {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Important info / alerts — surfaced at the top so nothing gets missed */}

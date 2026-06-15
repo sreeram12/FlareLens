@@ -250,6 +250,15 @@ export function useVoiceAgent({ onLogDraft }: { onLogDraft?: (draft: LogDraft) =
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }, [])
 
+  const clearTurns = useCallback(() => {
+    setTurns([])
+    try {
+      sessionStorage.removeItem(TRANSCRIPT_KEY)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   const upsertTurn = useCallback((turn: TranscriptTurn) => {
     setTurns((prev) => {
       const idx = prev.findIndex((t) => t.id === turn.id)
@@ -541,5 +550,5 @@ export function useVoiceAgent({ onLogDraft }: { onLogDraft?: (draft: LogDraft) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appendToTurn, handleFunctionCall, playAudioChunk, stop, upsertTurn])
 
-  return { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn }
+  return { status, error, turns, muted, start, stop, toggleMute, pushTurn, patchTurn, clearTurns }
 }
