@@ -495,11 +495,18 @@ export function useVoiceAgent({ onLogDraft }: { onLogDraft?: (draft: LogDraft) =
             setStatus('speaking')
             playAudioChunk(base64ToInt16(msg.delta as string))
             break
-          case 'response.output_audio_transcript.done':
-            if (assistantTurnRef.current) {
-              upsertTurn({ id: assistantTurnRef.current, role: 'assistant', text: '', done: true })
+          case 'response.output_audio_transcript.done': {
+            // Mark the assistant turn done WITHOUT clobbering its streamed text.
+            // Prefer the event's full transcript; otherwise keep what we streamed.
+            const id = assistantTurnRef.current
+            const finalText = (msg.transcript as string) || ''
+            if (id) {
+              setTurns((prev) =>
+                prev.map((t) => (t.id === id ? { ...t, done: true, text: finalText || t.text } : t))
+              )
             }
             break
+          }
           case 'response.function_call_arguments.done':
             handleFunctionCall(
               msg.name as string,
