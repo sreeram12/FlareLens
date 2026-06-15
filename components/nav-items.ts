@@ -1,4 +1,4 @@
-import { Activity, Mic, ListOrdered, FileText, Salad, Upload, type LucideIcon } from 'lucide-react'
+import { Activity, Mic, ListOrdered, FileText, Upload, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   href: string
@@ -9,13 +9,13 @@ export interface NavItem {
 }
 
 /**
- * Primary navigation. The mobile bottom bar stays lean (5 intent-based items,
- * Hick's Law); the desktop sidebar has room for Import too.
+ * Primary navigation. The mobile bottom bar stays lean (Hick's Law); the desktop
+ * sidebar also surfaces Import. Diet is intentionally NOT here — it's a reference
+ * page reached from the Today AID phase card and the assistant.
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Today', icon: Activity },
   { href: '/talk', label: 'Talk', icon: Mic },
-  { href: '/diet', label: 'Diet', icon: Salad, desktopOnly: true },
   { href: '/timeline', label: 'Timeline', icon: ListOrdered },
   { href: '/imports', label: 'Import', icon: Upload, desktopOnly: true },
   { href: '/report', label: 'Report', icon: FileText },
