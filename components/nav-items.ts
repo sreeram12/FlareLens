@@ -15,7 +15,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Today', icon: Activity },
   { href: '/talk', label: 'Talk', icon: Mic },
-  { href: '/diet', label: 'Diet', icon: Salad },
+  { href: '/diet', label: 'Diet', icon: Salad, desktopOnly: true },
   { href: '/timeline', label: 'Timeline', icon: ListOrdered },
   { href: '/imports', label: 'Import', icon: Upload, desktopOnly: true },
   { href: '/report', label: 'Report', icon: FileText },

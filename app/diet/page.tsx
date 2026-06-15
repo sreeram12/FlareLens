@@ -1,4 +1,5 @@
-import { getDietGuidance, getNutrientGaps, getRecentLogEntries } from '@/lib/actions'
+import Link from 'next/link'
+import { getDietGuidance } from '@/lib/actions'
 import {
   AID_PRINCIPLES,
   ANTI_INFLAMMATORY_FOODS,
@@ -6,9 +7,7 @@ import {
   PHASES,
   type AidPhase,
 } from '@/lib/ibd-aid'
-import { computeFoodExerciseTrends } from '@/lib/trends'
-import { MealLog } from '@/components/diet/meal-log'
-import { Salad, Check, X, Utensils, Sparkles, ArrowRight } from 'lucide-react'
+import { Salad, Check, X, ArrowRight, Mic, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -19,124 +18,40 @@ const ACCENT: Record<string, { text: string; bg: string; ring: string; dot: stri
   orange: { text: 'text-orange-400', bg: 'bg-orange-500/10', ring: 'border-orange-500/30', dot: 'bg-orange-400' },
 }
 
+/**
+ * Diet — the IBD-AID reference. Phase status lives on Today (AidPhaseCard) and
+ * personalized food Q&A lives in the assistant; this page is the trustworthy
+ * "what should I be eating" guide, led by what's actionable for the current phase.
+ */
 export default async function DietPage() {
-  const [{ phase, phaseInfo, todayAnti, todayPro }, nutrition, recentEntries] = await Promise.all([
-    getDietGuidance(),
-    getNutrientGaps(14),
-    getRecentLogEntries(200),
-  ])
+  const { phase, phaseInfo } = await getDietGuidance()
   const accent = ACCENT[phaseInfo.accent]
-
-  // The user's actual meals over the last ~30 days + anti-inflammatory balance.
-  // Anchor on the most recent entry (pure; avoids Date.now in render).
-  const anchor = recentEntries.reduce((mx, e) => Math.max(mx, new Date(e.loggedAt).getTime()), 0)
-  const cutoff = anchor - 30 * 86_400_000
-  const recentMeals = recentEntries.filter(
-    (e) => e.entryType === 'meal' && new Date(e.loggedAt).getTime() >= cutoff
-  )
-  const trends = computeFoodExerciseTrends(recentMeals)
 
   return (
     <main className="mx-auto max-w-md lg:max-w-3xl px-4 pb-24 pt-6">
       {/* Header */}
-      <header className="mb-5">
+      <header className="mb-4">
         <div className="flex items-center gap-2 mb-1">
           <Salad className="h-5 w-5 text-emerald-400" />
           <h1 className="text-xl font-semibold text-foreground">Anti-Inflammatory Diet</h1>
         </div>
         <p className="text-sm text-muted-foreground text-pretty leading-relaxed">
-          A phased, food-first approach (IBD-AID) that adapts to your current disease activity to help
-          calm inflammation and support remission.
+          The IBD Anti-Inflammatory Diet (IBD-AID) — a phased, food-first guide to calming inflammation
+          and supporting remission.
         </p>
       </header>
 
-      {/* Current phase banner */}
-      <section className={cn('rounded-xl border p-4 mb-5', accent.ring, accent.bg)}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your current phase</span>
-          <span className={cn('inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-semibold', accent.text)}>
-            <Sparkles className="h-3 w-3" /> Auto-matched
-          </span>
-        </div>
-        <h2 className={cn('text-lg font-bold mb-1', accent.text)}>{phaseInfo.name}</h2>
-        <p className="text-sm text-foreground/90 text-pretty leading-relaxed mb-3">{phaseInfo.summary}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn('inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-xs font-medium', accent.text)}>
-            <Utensils className="h-3.5 w-3.5" /> {phaseInfo.texture}
-          </span>
-        </div>
-        {(todayAnti > 0 || todayPro > 0) && (
-          <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
-            Today you logged <span className="text-emerald-400 font-semibold">{todayAnti}</span> anti-inflammatory
-            {todayPro > 0 && <> and <span className="text-orange-400 font-semibold">{todayPro}</span> foods to limit</>}.
-          </p>
-        )}
-      </section>
+      {/* Low-key phase context (status itself lives on Today) */}
+      <div className={cn('mb-6 flex items-center gap-2 rounded-lg border px-3 py-2', accent.ring, accent.bg)}>
+        <Sparkles className={cn('h-3.5 w-3.5 shrink-0', accent.text)} />
+        <p className="text-xs text-muted-foreground">
+          Tailored to your <span className={cn('font-semibold', accent.text)}>{phaseInfo.name}</span> phase — set
+          automatically from your recent stability score. Track your day-to-day balance on{' '}
+          <Link href="/timeline" className="underline underline-offset-2 hover:text-foreground">Timeline</Link>.
+        </p>
+      </div>
 
-      {/* What you've actually eaten + anti-inflammatory balance */}
-      <MealLog meals={recentMeals} phase={phase} trends={trends} />
-
-      {/* Nutrient watch — from imported MacroFactor nutrition */}
-      {nutrition.daysWithNutritionData > 0 && nutrition.gaps.length > 0 && (
-        <section className="mb-6">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Nutrient watch</h3>
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2.5">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              From {nutrition.daysWithNutritionData} day{nutrition.daysWithNutritionData > 1 ? 's' : ''} of imported nutrition. General targets — discuss with your care team.
-            </p>
-            {nutrition.gaps.slice(0, 5).map((g) => (
-              <div key={g.key} className="flex items-center justify-between gap-2">
-                <span className="text-sm text-foreground">{g.label}</span>
-                <span
-                  className={cn(
-                    'text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 tabular-nums',
-                    g.status === 'low' ? 'text-yellow-400 bg-yellow-500/10' : 'text-orange-400 bg-orange-500/10'
-                  )}
-                >
-                  {g.status === 'low' ? 'Low' : 'High'} · {g.avg}
-                  {g.unit}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Phase journey */}
-      <section className="mb-6">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">The 3-phase journey</h3>
-        <div className="flex flex-col gap-2">
-          {([1, 2, 3] as AidPhase[]).map((p) => {
-            const info = PHASES[p]
-            const a = ACCENT[info.accent]
-            const isCurrent = p === phase
-            return (
-              <div
-                key={p}
-                className={cn(
-                  'rounded-lg border p-3 transition-colors',
-                  isCurrent ? cn(a.ring, a.bg) : 'border-border bg-card'
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', a.bg, a.text)}>
-                    {p}
-                  </span>
-                  <span className={cn('text-sm font-semibold', isCurrent ? a.text : 'text-foreground')}>
-                    {info.shortName}
-                  </span>
-                  {isCurrent && (
-                    <span className={cn('ml-auto text-[10px] font-medium uppercase tracking-wide', a.text)}>You are here</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1.5 pl-8">{info.appliesWhen}</p>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* What to emphasize now */}
+      {/* What to emphasize now — most actionable, leads the page */}
       <section className="mb-6">
         <h3 className="text-sm font-semibold text-foreground mb-3">Eat more right now</h3>
         <div className="grid grid-cols-1 gap-2">
@@ -173,6 +88,52 @@ export default async function DietPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* Hand off personalized questions to the assistant */}
+      <Link
+        href="/talk"
+        className="mb-7 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 transition-colors hover:bg-primary/10"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15">
+          <Mic className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">Wondering about a specific food?</p>
+          <p className="text-xs text-muted-foreground">Ask FlareLens — it answers for your current phase.</p>
+        </div>
+        <ArrowRight className="h-4 w-4 text-primary" />
+      </Link>
+
+      {/* Phase journey */}
+      <section className="mb-6">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">The 3-phase journey</h3>
+        <div className="flex flex-col gap-2">
+          {([1, 2, 3] as AidPhase[]).map((p) => {
+            const info = PHASES[p]
+            const a = ACCENT[info.accent]
+            const isCurrent = p === phase
+            return (
+              <div
+                key={p}
+                className={cn('rounded-lg border p-3 transition-colors', isCurrent ? cn(a.ring, a.bg) : 'border-border bg-card')}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', a.bg, a.text)}>
+                    {p}
+                  </span>
+                  <span className={cn('text-sm font-semibold', isCurrent ? a.text : 'text-foreground')}>
+                    {info.shortName}
+                  </span>
+                  {isCurrent && (
+                    <span className={cn('ml-auto text-[10px] font-medium uppercase tracking-wide', a.text)}>You are here</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5 pl-8">{info.appliesWhen}</p>
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       {/* The 5 principles */}
