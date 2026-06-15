@@ -4,24 +4,30 @@
  * Computes a 0–100 deviation score from personal baseline.
  * Higher = worse (more deviation from stable baseline).
  *
- * Domain weights (from PRD):
- *   Gut Activity:    30%
- *   Energy/Sleep:    20%
- *   Nutrition:       15%
- *   Medications:     15%
- *   Exercise:        10%
- *   Clinical Labs:    5%
- *   Systemic:         5%
+ * Domain weights are grounded in IBD monitoring evidence, and deliberately lean
+ * on objective / passively-captured signals (biomarkers + wearables) rather than
+ * daily self-report — most people won't log pain/stools every day.
+ *   Symptoms (PRO):     22%  — abdominal pain + stool frequency are the
+ *                              clinical-remission targets in STRIDE-II.
+ *   Inflammation:       20%  — CRP + fecal calprotectin, the treat-to-target
+ *                              biomarkers (STRIDE-II short/intermediate targets).
+ *   Recovery:           20%  — resting HR, HRV, sleep, respiratory rate; these
+ *                              shift up to ~7 weeks before flares (Mount Sinai
+ *                              IBD Forecast study, Gastroenterology 2025).
+ *   Medications:        15%  — adherence underpins staying in remission.
+ *   Nutrition (IBD-AID):13%  — anti-inflammatory eating pattern.
+ *   Activity:           10%  — step counts fall during flares.
+ *
+ * Refs: STRIDE-II (Gastroenterology 2021); IBD Forecast Study (Gastroenterology 2025).
  */
 
 export interface DomainScores {
-  gut: number       // 0–30
-  energy: number    // 0–20
-  nutrition: number // 0–15
-  medications: number // 0–15
-  exercise: number  // 0–10
-  clinical: number  // 0–5
-  systemic: number  // 0–5
+  symptoms: number     // 0–22
+  inflammation: number // 0–20
+  recovery: number     // 0–20
+  medications: number  // 0–15
+  nutrition: number    // 0–13
+  activity: number     // 0–10
 }
 
 export interface StabilityResult {
@@ -52,8 +58,12 @@ export interface DayData {
   exerciseMinutes: number
   crpLevel: number | null    // mg/L
   wbcLevel: number | null    // K/uL
+  calprotectin: number | null // µg/g (fecal)
   temperature: number | null // celsius
   nausea: number             // 0–10
+  restingHeartRate: number | null // bpm (wearable)
+  hrv: number | null              // ms (wearable)
+  respiratoryRate: number | null  // breaths/min (wearable)
 }
 
 export interface Baseline {
@@ -67,6 +77,10 @@ export interface Baseline {
   weight_kg: number
   crp_baseline: number
   wbc_baseline: number
+  calprotectin_baseline: number
+  resting_hr_baseline: number
+  hrv_baseline: number
+  respiratory_rate_baseline: number
 }
 
 function clamp(val: number, min: number, max: number) {
@@ -82,117 +96,112 @@ function devScore(actual: number, baseline: number, maxDev: number, weight: numb
 export function computeStabilityScore(data: DayData, baseline: Baseline): StabilityResult {
   const reasons: string[] = []
 
-  // ── DISEASE ACTIVITY (30 pts) ───────────────────────────────────────────────
-  // Crohn's is a whole-gut inflammatory disease — not just stool frequency.
-  // We weight pain, urgency, bloating and blood alongside (de-emphasized) BM count.
-  // BM count deviation (max ±5 from baseline) — capped lower so it isn't the headline
-  const bmDev = devScore(data.bowelMovements, baseline.bowel_movements_per_day, 5, 7)
-  // Urgency
-  const urgencyScore = (data.urgencyLevel / 10) * 7
-  // Abdominal pain — a primary symptom of active disease
-  const painScore = (data.painScale / 10) * 9
-  // Bloating / cramping
-  const bloatingScore = (data.bloating / 10) * 4
-  // Blood
-  const bloodScore = data.bloodInStool ? 3 : 0
-
-  const gut = clamp(bmDev + urgencyScore + painScore + bloatingScore + bloodScore, 0, 30)
+  // ── SYMPTOMS (22 pts) — STRIDE-II clinical-remission PROs ────────────────────
+  // Abdominal pain + stool frequency are the patient-reported targets; we de-
+  // emphasize raw BM count and fold in urgency/bloating/blood/nausea.
+  const painScore = (data.painScale / 10) * 8
+  const bmDev = devScore(data.bowelMovements, baseline.bowel_movements_per_day, 5, 5)
+  const urgencyScore = (data.urgencyLevel / 10) * 4
+  const bloatingScore = (data.bloating / 10) * 2
+  const bloodScore = data.bloodInStool ? 2 : 0
+  const symNausea = (data.nausea / 10) * 1
+  const symptoms = clamp(painScore + bmDev + urgencyScore + bloatingScore + bloodScore + symNausea, 0, 22)
 
   if (data.painScale >= 5) reasons.push(`Significant abdominal pain (${data.painScale}/10)`)
   if (data.bloodInStool) reasons.push('Blood detected in stool')
   if (data.urgencyLevel >= 6) reasons.push(`High urgency level (${data.urgencyLevel}/10)`)
-  if (data.bloating >= 6) reasons.push(`Notable bloating / cramping (${data.bloating}/10)`)
   if (data.bowelMovements > baseline.bowel_movements_per_day + 2) {
     reasons.push(`Stool frequency above baseline (${data.bowelMovements} vs. ${baseline.bowel_movements_per_day})`)
   }
 
-  // ── ENERGY/SLEEP (20 pts) ───────────────────────────────────────────────────
-  const sleepDev = devScore(data.sleepHours, baseline.sleep_hours, 3, 8)
-  const energyDev = devScore(data.energyLevel, baseline.energy_level, 5, 6)
-  const fatigueScore = (data.fatigue / 10) * 6
+  // ── INFLAMMATION (20 pts) — treat-to-target biomarkers ───────────────────────
+  let inflammation = 0
+  if (data.crpLevel !== null) {
+    inflammation += clamp((data.crpLevel - baseline.crp_baseline) / (baseline.crp_baseline * 3), 0, 1) * 10
+    if (data.crpLevel > baseline.crp_baseline * 2) reasons.push(`Elevated CRP (${data.crpLevel} mg/L)`)
+  }
+  if (data.calprotectin !== null) {
+    inflammation += clamp((data.calprotectin - baseline.calprotectin_baseline) / 200, 0, 1) * 8
+    if (data.calprotectin > 250) reasons.push(`High fecal calprotectin (${data.calprotectin} µg/g)`)
+  }
+  if (data.temperature !== null && data.temperature > 38.0) {
+    inflammation += clamp((data.temperature - 37.0) * 2, 0, 2)
+    reasons.push(`Low-grade fever (${data.temperature.toFixed(1)}°C)`)
+  }
+  inflammation = clamp(inflammation, 0, 20)
 
-  const energy = clamp(sleepDev + energyDev + fatigueScore, 0, 20)
+  // ── RECOVERY (20 pts) — wearable physiology + sleep (early flare signals) ─────
+  let recovery = 0
+  if (data.sleepHours < baseline.sleep_hours) {
+    recovery += clamp((baseline.sleep_hours - data.sleepHours) / 3, 0, 1) * 6
+  }
+  if (data.restingHeartRate !== null && data.restingHeartRate > baseline.resting_hr_baseline) {
+    recovery += clamp((data.restingHeartRate - baseline.resting_hr_baseline) / 12, 0, 1) * 5
+  }
+  if (data.hrv !== null && data.hrv < baseline.hrv_baseline) {
+    recovery += clamp((baseline.hrv_baseline - data.hrv) / baseline.hrv_baseline, 0, 1) * 5
+  }
+  if (data.respiratoryRate !== null && data.respiratoryRate > baseline.respiratory_rate_baseline) {
+    recovery += clamp((data.respiratoryRate - baseline.respiratory_rate_baseline) / 4, 0, 1) * 2
+  }
+  recovery += (data.fatigue / 10) * 4
+  recovery = clamp(recovery, 0, 20)
 
   if (data.sleepHours < baseline.sleep_hours - 1.5) {
     reasons.push(`Poor sleep (${data.sleepHours.toFixed(1)}h vs. baseline ${baseline.sleep_hours}h)`)
   }
+  if (data.restingHeartRate !== null && data.restingHeartRate > baseline.resting_hr_baseline + 6) {
+    reasons.push(`Resting heart rate elevated (${data.restingHeartRate} bpm)`)
+  }
+  if (data.hrv !== null && data.hrv < baseline.hrv_baseline * 0.8) {
+    reasons.push(`HRV below baseline (${data.hrv} ms)`)
+  }
   if (data.fatigue >= 6) reasons.push(`High fatigue reported (${data.fatigue}/10)`)
 
-  // ── NUTRITION / ANTI-INFLAMMATORY DIET (15 pts) ─────────────────────────────
-  // Scores adherence to an anti-inflammatory (IBD-AID) eating pattern.
-  // Pro-inflammatory foods add deviation; anti-inflammatory foods reduce it.
-  // Under-eating still matters during flares, so caloric shortfall is included.
+  // ── NUTRITION / ANTI-INFLAMMATORY DIET (13 pts) ──────────────────────────────
   const calShortfall =
     data.caloriesConsumed < baseline.calories_per_day * 0.7 && data.caloriesConsumed > 0
-      ? devScore(data.caloriesConsumed, baseline.calories_per_day, 900, 4)
+      ? devScore(data.caloriesConsumed, baseline.calories_per_day, 900, 3)
       : 0
-
-  // Pro-inflammatory load: each pro-inflammatory food adds up to ~3.5 pts (cap 9)
-  const proLoad = clamp(data.proInflammatoryFoods * 3.5, 0, 9)
-  // Anti-inflammatory credit: each AID-friendly food offsets up to ~1.5 pts
-  const antiCredit = clamp(data.antiInflammatoryFoods * 1.5, 0, 6)
-
-  // Legacy explicit trigger flag still contributes
-  const triggerScore = data.triggerFoodsConsumed ? 3 : 0
-
-  const nutrition = clamp(proLoad + triggerScore + calShortfall - antiCredit, 0, 15)
+  const proLoad = clamp(data.proInflammatoryFoods * 3.5, 0, 8)
+  const antiCredit = clamp(data.antiInflammatoryFoods * 1.5, 0, 5)
+  const triggerScore = data.triggerFoodsConsumed ? 2 : 0
+  const nutrition = clamp(proLoad + triggerScore + calShortfall - antiCredit, 0, 13)
 
   if (data.proInflammatoryFoods > 0) {
     reasons.push(
       `${data.proInflammatoryFoods} pro-inflammatory food${data.proInflammatoryFoods !== 1 ? 's' : ''} logged today`
     )
   }
-  if (data.antiInflammatoryFoods >= 2) {
-    reasons.push(`${data.antiInflammatoryFoods} anti-inflammatory foods support recovery`)
-  }
   if (data.triggerFoodsConsumed) reasons.push('Known trigger foods consumed today')
   if (data.caloriesConsumed < baseline.calories_per_day * 0.6 && data.caloriesConsumed > 0) {
     reasons.push(`Low caloric intake (${data.caloriesConsumed} kcal)`)
   }
 
-  // ── MEDICATIONS (15 pts) ────────────────────────────────────────────────────
+  // ── MEDICATIONS (15 pts) ─────────────────────────────────────────────────────
   const medications = data.medsAdherent ? 0 : 15
-
   if (!data.medsAdherent) reasons.push('Missed medication dose')
 
-  // ── EXERCISE (10 pts) ───────────────────────────────────────────────────────
-  const stepDev = devScore(data.stepsWalked, baseline.steps_per_day, baseline.steps_per_day, 10)
-  const exercise = clamp(stepDev, 0, 10)
-
+  // ── ACTIVITY (10 pts) — fewer steps tracks with flares ───────────────────────
+  let activity = 0
+  if (baseline.steps_per_day > 0 && data.stepsWalked < baseline.steps_per_day) {
+    activity = clamp((baseline.steps_per_day - data.stepsWalked) / baseline.steps_per_day, 0, 1) * 10
+  }
   if (data.stepsWalked < baseline.steps_per_day * 0.3 && baseline.steps_per_day > 0) {
     reasons.push(`Very low activity (${data.stepsWalked.toLocaleString()} steps)`)
   }
 
-  // ── CLINICAL (5 pts) ────────────────────────────────────────────────────────
-  let clinical = 0
-  if (data.crpLevel !== null && data.crpLevel > baseline.crp_baseline * 2) {
-    clinical = 5
-    reasons.push(`Elevated CRP (${data.crpLevel} mg/L)`)
-  } else if (data.crpLevel !== null && data.crpLevel > baseline.crp_baseline * 1.5) {
-    clinical = 3
-  }
-
-  // ── SYSTEMIC (5 pts) ────────────────────────────────────────────────────────
-  let systemic = 0
-  if (data.temperature !== null && data.temperature > 38.0) {
-    systemic = clamp((data.temperature - 37.0) * 2.5, 0, 5)
-    reasons.push(`Low-grade fever (${data.temperature.toFixed(1)}°C)`)
-  }
-  const nauseaScore = (data.nausea / 10) * 3
-  systemic = clamp(systemic + nauseaScore, 0, 5)
-
   const domainScores: DomainScores = {
-    gut: Math.round(gut * 10) / 10,
-    energy: Math.round(energy * 10) / 10,
-    nutrition: Math.round(nutrition * 10) / 10,
+    symptoms: Math.round(symptoms * 10) / 10,
+    inflammation: Math.round(inflammation * 10) / 10,
+    recovery: Math.round(recovery * 10) / 10,
     medications: Math.round(medications * 10) / 10,
-    exercise: Math.round(exercise * 10) / 10,
-    clinical: Math.round(clinical * 10) / 10,
-    systemic: Math.round(systemic * 10) / 10,
+    nutrition: Math.round(nutrition * 10) / 10,
+    activity: Math.round(activity * 10) / 10,
   }
 
   const totalScore = Math.round(
-    (gut + energy + nutrition + medications + exercise + clinical + systemic) * 10
+    (symptoms + inflammation + recovery + medications + nutrition + activity) * 10
   ) / 10
 
   const isFlareDay = totalScore >= 45
@@ -225,13 +234,12 @@ export function getDomainLabel(domain: keyof DomainScores): {
   icon: string
 } {
   const map: Record<keyof DomainScores, { name: string; maxScore: number; icon: string }> = {
-    gut: { name: 'Disease Activity', maxScore: 30, icon: 'gut' },
-    energy: { name: 'Energy & Sleep', maxScore: 20, icon: 'energy' },
-    nutrition: { name: 'Anti-Inflammatory Diet', maxScore: 15, icon: 'nutrition' },
+    symptoms: { name: 'Symptoms', maxScore: 22, icon: 'symptoms' },
+    inflammation: { name: 'Inflammation', maxScore: 20, icon: 'inflammation' },
+    recovery: { name: 'Recovery & Sleep', maxScore: 20, icon: 'recovery' },
     medications: { name: 'Medications', maxScore: 15, icon: 'medications' },
-    exercise: { name: 'Exercise', maxScore: 10, icon: 'exercise' },
-    clinical: { name: 'Clinical', maxScore: 5, icon: 'clinical' },
-    systemic: { name: 'Systemic', maxScore: 5, icon: 'systemic' },
+    nutrition: { name: 'Anti-Inflammatory Diet', maxScore: 13, icon: 'nutrition' },
+    activity: { name: 'Activity', maxScore: 10, icon: 'activity' },
   }
   return map[domain]
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { getDomainLabel, type DomainScores } from '@/lib/stability-score'
 import { cn } from '@/lib/utils'
-import { Zap, Utensils, Pill, Dumbbell, FlaskConical, Thermometer, Activity, ChevronRight } from 'lucide-react'
+import { HeartPulse, Utensils, Pill, Dumbbell, FlaskConical, Activity, ChevronRight, Sparkles } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -13,50 +13,55 @@ import {
 } from '@/components/ui/sheet'
 
 const DOMAIN_ICONS: Record<string, React.ElementType> = {
-  gut: Activity,
-  energy: Zap,
-  nutrition: Utensils,
+  symptoms: Activity,
+  inflammation: FlaskConical,
+  recovery: HeartPulse,
   medications: Pill,
-  exercise: Dumbbell,
-  clinical: FlaskConical,
-  systemic: Thermometer,
+  nutrition: Utensils,
+  activity: Dumbbell,
 }
 
-const DOMAIN_INFO: Record<string, { weight: string; description: string; measures: string[] }> = {
-  gut: {
-    weight: '30%',
-    description: 'Overall Crohn\u2019s disease activity — pain, urgency, bloating and inflammation, not just stool frequency.',
-    measures: ['Abdominal pain & cramping', 'Urgency level', 'Bloating', 'Blood in stool', 'Stool frequency vs. baseline'],
+// `passive` = captured automatically (records / wearables), not daily self-report.
+const DOMAIN_INFO: Record<string, { weight: string; passive: boolean; description: string; measures: string[] }> = {
+  symptoms: {
+    weight: '22%',
+    passive: false,
+    description:
+      'Your reported symptoms. Abdominal pain and stool frequency are the patient-reported clinical-remission targets in IBD (STRIDE-II).',
+    measures: ['Abdominal pain', 'Stool frequency vs. baseline', 'Urgency', 'Bloating', 'Blood in stool', 'Nausea'],
   },
-  energy: {
+  inflammation: {
     weight: '20%',
-    description: 'Sleep and energy are early indicators of inflammation and recovery.',
-    measures: ['Sleep duration vs. baseline', 'Sleep quality', 'Daytime fatigue', 'Energy level'],
+    passive: true,
+    description:
+      'Objective biomarkers of gut inflammation — the treat-to-target markers your GI follows (STRIDE-II). Pulled automatically from your medical records.',
+    measures: ['Fecal calprotectin', 'CRP (C-reactive protein)', 'Fever'],
   },
-  nutrition: {
-    weight: '15%',
-    description: 'How closely today\u2019s food follows an anti-inflammatory (IBD-AID) pattern that helps calm gut inflammation.',
-    measures: ['Anti-inflammatory foods (omega-3, probiotics, soluble fiber)', 'Pro-inflammatory foods (refined sugar, fried & processed)', 'Known trigger foods', 'Adequate intake during flares'],
+  recovery: {
+    weight: '20%',
+    passive: true,
+    description:
+      'Wearable physiology and sleep. Resting heart rate, HRV and activity can shift up to ~7 weeks before a flare (Mount Sinai IBD Forecast study, 2025).',
+    measures: ['Resting heart rate', 'Heart-rate variability (HRV)', 'Sleep vs. baseline', 'Respiratory rate', 'Fatigue'],
   },
   medications: {
     weight: '15%',
-    description: 'Adherence to your prescribed treatment plan.',
+    passive: false,
+    description: 'Adherence to your prescribed treatment plan — the foundation of staying in remission.',
     measures: ['Doses taken on schedule', 'Missed or skipped doses'],
   },
-  exercise: {
+  nutrition: {
+    weight: '13%',
+    passive: false,
+    description:
+      'How closely your food follows an anti-inflammatory (IBD-AID) pattern that helps calm gut inflammation.',
+    measures: ['Anti-inflammatory foods (omega-3, probiotics, soluble fiber)', 'Pro-inflammatory foods (refined sugar, fried & processed)', 'Known trigger foods', 'Adequate intake during flares'],
+  },
+  activity: {
     weight: '10%',
-    description: 'Movement supports remission; very low activity can signal fatigue or flare.',
+    passive: true,
+    description: 'Daily movement. Step counts drop during flares, and regular moderate activity supports remission.',
     measures: ['Steps vs. baseline', 'Active minutes'],
-  },
-  clinical: {
-    weight: '5%',
-    description: 'Objective lab markers of systemic inflammation.',
-    measures: ['CRP (C-reactive protein)', 'White blood cell count'],
-  },
-  systemic: {
-    weight: '5%',
-    description: 'Whole-body symptoms that often accompany active disease.',
-    measures: ['Fever / temperature', 'Nausea'],
   },
 }
 
@@ -87,13 +92,12 @@ function isRelevant(domain: string, entry: LogEntry): boolean {
   const t = entry.entryType
   const d = (entry.data ?? {}) as Record<string, unknown>
   switch (domain) {
-    case 'gut': return t === 'bowel_movement' || (t === 'symptom' && (d.pain_scale != null || d.bloating != null))
-    case 'energy': return t === 'sleep' || (t === 'symptom' && d.fatigue != null)
+    case 'symptoms': return t === 'bowel_movement' || (t === 'symptom' && (d.pain_scale != null || d.bloating != null || d.nausea != null))
+    case 'inflammation': return t === 'lab' || d.temperature != null
+    case 'recovery': return t === 'wearable' || t === 'sleep' || (t === 'symptom' && d.fatigue != null)
+    case 'activity': return t === 'exercise' || ((t === 'weight' || t === 'wearable') && d.steps != null)
     case 'nutrition': return t === 'meal'
     case 'medications': return t === 'medication'
-    case 'exercise': return t === 'exercise' || (t === 'weight' && d.steps != null)
-    case 'clinical': return t === 'lab'
-    case 'systemic': return (t === 'symptom' && d.nausea != null) || d.temperature != null
     default: return false
   }
 }
@@ -110,15 +114,21 @@ function summarizeEntry(domain: string, entry: LogEntry): string {
     if (Number(d.pain_before) > 0) parts.push(`pain ${Number(d.pain_before)}/10`)
     if (d.blood) parts.push('blood present')
   } else if (t === 'symptom') {
-    if (domain === 'gut') {
+    if (domain === 'symptoms') {
       if (d.pain_scale != null) parts.push(`pain ${Number(d.pain_scale)}/10`)
       if (d.bloating != null) parts.push(`bloating ${Number(d.bloating)}/10`)
+      if (d.nausea != null) parts.push(`nausea ${Number(d.nausea)}/10`)
     }
-    if (domain === 'energy' && d.fatigue != null) parts.push(`fatigue ${Number(d.fatigue)}/10`)
-    if (domain === 'systemic' && d.nausea != null) parts.push(`nausea ${Number(d.nausea)}/10`)
+    if (domain === 'recovery' && d.fatigue != null) parts.push(`fatigue ${Number(d.fatigue)}/10`)
   } else if (t === 'sleep') {
     if (d.duration_hours != null) parts.push(`${Number(d.duration_hours).toFixed(1)}h sleep`)
     if (d.quality != null) parts.push(`quality ${Number(d.quality)}/10`)
+  } else if (t === 'wearable') {
+    if (d.sleep_hours != null) parts.push(`${Number(d.sleep_hours).toFixed(1)}h sleep`)
+    if (d.resting_hr != null) parts.push(`RHR ${Number(d.resting_hr)}`)
+    if (d.hrv != null) parts.push(`HRV ${Number(d.hrv)}`)
+    if (d.respiratory_rate != null) parts.push(`resp ${Number(d.respiratory_rate)}`)
+    if (domain === 'activity' && d.steps != null) parts.push(`${Number(d.steps).toLocaleString()} steps`)
   } else if (t === 'meal') {
     const desc = (d.description as string) || (d.food as string) || (d.name as string)
     if (desc && desc !== 'Daily nutrition (MacroFactor)') parts.push(desc)
@@ -126,7 +136,7 @@ function summarizeEntry(domain: string, entry: LogEntry): string {
     if (d.protein_g != null) parts.push(`${Number(d.protein_g)}g protein`)
     if (d.trigger_foods) parts.push('trigger foods')
   } else if (t === 'medication') {
-    const name = (d.name as string) || 'Medication'
+    const name = (d.med_name as string) || (d.name as string) || 'Medication'
     parts.push(`${name} — ${d.taken === false ? 'missed' : 'taken'}`)
   } else if (t === 'exercise') {
     if (d.steps != null) parts.push(`${Number(d.steps).toLocaleString()} steps`)
@@ -135,22 +145,22 @@ function summarizeEntry(domain: string, entry: LogEntry): string {
     if (d.steps != null) parts.push(`${Number(d.steps).toLocaleString()} steps`)
   } else if (t === 'lab') {
     if (d.crp != null) parts.push(`CRP ${Number(d.crp)} mg/L`)
+    if (d.calprotectin != null) parts.push(`calprotectin ${Number(d.calprotectin)} ug/g`)
     if (d.wbc != null) parts.push(`WBC ${Number(d.wbc)} K/uL`)
   }
 
-  if (d.temperature != null && domain === 'systemic') parts.push(`${Number(d.temperature).toFixed(1)}°C`)
+  if (d.temperature != null && domain === 'inflammation') parts.push(`${Number(d.temperature).toFixed(1)}°C`)
 
   return parts.join(' · ') || t.replace(/_/g, ' ')
 }
 
 const REASON_KEYWORDS: Record<string, RegExp> = {
-  gut: /\bBMs?\b|blood|urgency|pain/i,
-  energy: /sleep|fatigue/i,
+  symptoms: /\bBMs?\b|blood|urgency|pain|bloat|nausea|stool/i,
+  inflammation: /CRP|calprotectin|fever/i,
+  recovery: /sleep|fatigue|resting heart|HRV|heart rate/i,
+  activity: /activity|steps/i,
   nutrition: /trigger food|caloric|kcal|calorie|inflammatory|anti-inflammatory/i,
   medications: /medication|dose/i,
-  exercise: /activity|steps/i,
-  clinical: /CRP|WBC/i,
-  systemic: /fever|nausea/i,
 }
 
 function formatTime(value: Date | string): string {
@@ -159,7 +169,7 @@ function formatTime(value: Date | string): string {
 }
 
 export function DomainCards({ domainScores, entries = [], reasons = [] }: DomainCardsProps) {
-  const domains = (['gut', 'energy', 'nutrition', 'medications', 'exercise', 'clinical', 'systemic'] as const)
+  const domains = (['symptoms', 'inflammation', 'recovery', 'medications', 'nutrition', 'activity'] as const)
   const [open, setOpen] = useState<keyof DomainScores | null>(null)
 
   const active = open
@@ -183,6 +193,7 @@ export function DomainCards({ domainScores, entries = [], reasons = [] }: Domain
           const { text, bar, bg } = getDomainColor(score, meta.maxScore)
           const pct = meta.maxScore > 0 ? Math.min((score / meta.maxScore) * 100, 100) : 0
           const Icon = DOMAIN_ICONS[key] ?? Activity
+          const passive = DOMAIN_INFO[key]?.passive
 
           return (
             <button
@@ -197,11 +208,11 @@ export function DomainCards({ domainScores, entries = [], reasons = [] }: Domain
               )}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Icon className={cn('h-3.5 w-3.5', text)} strokeWidth={2} />
-                  <span className="text-xs font-medium text-foreground leading-none">{meta.name}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0', text)} strokeWidth={2} />
+                  <span className="text-xs font-medium text-foreground leading-none truncate">{meta.name}</span>
                 </div>
-                <span className={cn('text-xs font-bold tabular-nums', text)}>
+                <span className={cn('text-xs font-bold tabular-nums shrink-0', text)}>
                   {score.toFixed(0)}<span className="text-muted-foreground font-normal">/{meta.maxScore}</span>
                 </span>
               </div>
@@ -213,7 +224,9 @@ export function DomainCards({ domainScores, entries = [], reasons = [] }: Domain
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">Tap for details</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {passive ? 'Auto-tracked' : 'Tap for details'}
+                </span>
                 <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
             </button>
@@ -233,7 +246,14 @@ export function DomainCards({ domainScores, entries = [], reasons = [] }: Domain
                     </div>
                     <div>
                       <SheetTitle className="text-base">{activeMeta.name}</SheetTitle>
-                      <p className="text-xs text-muted-foreground">Weighted {activeInfo.weight} of your score</p>
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        Weighted {activeInfo.weight} of your score
+                        {activeInfo.passive && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            <Sparkles className="h-2.5 w-2.5" /> Auto-tracked
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -270,7 +290,7 @@ export function DomainCards({ domainScores, entries = [], reasons = [] }: Domain
                 {/* Today's entries */}
                 <section>
                   <h3 className="text-xs font-medium text-muted-foreground tracking-wide uppercase mb-2">
-                    {`Today\u2019s entries`}
+                    {`Today’s entries`}
                   </h3>
                   {activeEntries.length > 0 ? (
                     <ul className="flex flex-col gap-1.5">

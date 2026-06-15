@@ -109,6 +109,10 @@ export async function getBaselines(): Promise<Baseline> {
     weight_kg: map.weight_kg ?? 68,
     crp_baseline: map.crp_baseline ?? 2.5,
     wbc_baseline: map.wbc_baseline ?? 6.5,
+    calprotectin_baseline: map.calprotectin_baseline ?? 50,
+    resting_hr_baseline: map.resting_hr_baseline ?? 60,
+    hrv_baseline: map.hrv_baseline ?? 50,
+    respiratory_rate_baseline: map.respiratory_rate_baseline ?? 15,
   }
 }
 
@@ -121,6 +125,41 @@ export async function computeAndSaveTodayScore() {
 
   // Aggregate today's entries into DayData
   const dayData = aggregateEntriesIntoDayData(entries)
+
+  // Carry forward the most recent objective signals — labs (your last
+  // calprotectin/CRP stands until re-measured) and wearable physiology — so the
+  // daily score reflects current status even on days without a fresh draw/log.
+  const recentLabs = await db
+    .select()
+    .from(logEntries)
+    .where(and(eq(logEntries.patientId, PATIENT_ID), eq(logEntries.entryType, 'lab')))
+    .orderBy(desc(logEntries.loggedAt))
+    .limit(60)
+  if (dayData.crpLevel == null) {
+    const r = recentLabs.find((e) => (e.data as Record<string, unknown>)?.crp != null)
+    if (r) dayData.crpLevel = Number((r.data as Record<string, unknown>).crp)
+  }
+  if (dayData.calprotectin == null) {
+    const r = recentLabs.find((e) => (e.data as Record<string, unknown>)?.calprotectin != null)
+    if (r) dayData.calprotectin = Number((r.data as Record<string, unknown>).calprotectin)
+  }
+  if (dayData.restingHeartRate == null) {
+    const w = await db
+      .select()
+      .from(logEntries)
+      .where(and(eq(logEntries.patientId, PATIENT_ID), eq(logEntries.entryType, 'wearable')))
+      .orderBy(desc(logEntries.loggedAt))
+      .limit(1)
+    const wd = w[0]?.data as Record<string, unknown> | undefined
+    if (wd) {
+      if (wd.resting_hr != null) dayData.restingHeartRate = Number(wd.resting_hr)
+      if (wd.hrv != null) dayData.hrv = Number(wd.hrv)
+      if (wd.respiratory_rate != null) dayData.respiratoryRate = Number(wd.respiratory_rate)
+      if (wd.sleep_hours != null) dayData.sleepHours = Number(wd.sleep_hours)
+      if (wd.steps != null) dayData.stepsWalked = Number(wd.steps)
+    }
+  }
+
   const result = computeStabilityScore(dayData, baseline)
 
   await db
@@ -335,6 +374,9 @@ async function ensureFindingsTable() {
  */
 export async function runAnalysis() {
   await ensureFindingsTable()
+
+  // Keep today's stability score fresh (also picks up scoring-model changes).
+  await computeAndSaveTodayScore().catch(() => {})
 
   const [fingerprint, nutrition] = await Promise.all([getFlareFingerprint(), getNutrientGaps(14)])
 
@@ -800,8 +842,12 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
   let exerciseMins = 0
   let crp: number | null = null
   let wbc: number | null = null
+  let calprotectin: number | null = null
   const temp: number | null = null
   let nausea = 0
+  let restingHeartRate: number | null = null
+  let hrv: number | null = null
+  let respiratoryRate: number | null = null
 
   for (const entry of entries) {
     const d = entry.data as Record<string, unknown>
@@ -861,18 +907,22 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
       }
     }
 
-    // Daily wearable record (Apple Health / Oura): real sleep + steps.
+    // Daily wearable record (Apple Health / Oura): sleep, steps, physiology.
     if (entry.entryType === 'wearable') {
       if (d.sleep_hours != null) sleepHours = Number(d.sleep_hours)
       if (d.steps != null) {
         steps += Number(d.steps)
         stepsLogged = true
       }
+      if (d.resting_hr != null) restingHeartRate = Number(d.resting_hr)
+      if (d.hrv != null) hrv = Number(d.hrv)
+      if (d.respiratory_rate != null) respiratoryRate = Number(d.respiratory_rate)
     }
 
     if (entry.entryType === 'lab') {
       if (d.crp !== undefined) crp = Number(d.crp)
       if (d.wbc !== undefined) wbc = Number(d.wbc)
+      if (d.calprotectin !== undefined) calprotectin = Number(d.calprotectin)
     }
   }
 
@@ -905,7 +955,11 @@ function aggregateEntriesIntoDayData(entries: Awaited<ReturnType<typeof getLogEn
     exerciseMinutes: exerciseMins,
     crpLevel: crp,
     wbcLevel: wbc,
+    calprotectin,
     temperature: temp,
     nausea,
+    restingHeartRate,
+    hrv,
+    respiratoryRate,
   }
 }
